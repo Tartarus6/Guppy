@@ -25,7 +25,7 @@
             ariaLabel="Mark todo as complete"
         />
     </div>
-    <span class='font-bold'>{todo.text}</span>
+    <span class='font-bold {todo.completed ? 'line-through text-gray-400' : ''}'>{todo.text}</span>
     <button class='ml-auto' aria-label="delete todo button" onmousedown={async () => {
         await todoService.deleteTodo(sectionsContext, todo.id)
         }}>
