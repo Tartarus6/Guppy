@@ -36,3 +36,4 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Section symbols
 - Automatic section coloring
 - Priority level labels
+- Optimistic client side state updates (remove a todo from the client side before waiting for the server to respond with the new state)

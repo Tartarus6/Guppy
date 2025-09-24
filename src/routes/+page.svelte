@@ -1,26 +1,30 @@
 <script lang="ts">
-    import TodoSectionContainer from "$lib/components/TodoSectionContainer.svelte";
-    import { todoService } from "$lib/client/todos";
     import type { TodoItem, TodoSectionWithTodosByPriority, NewTodoItem, NewTodoSection } from '$lib/server/db';
+    import { todoService } from "$lib/client/todos";
+	import { getSectionsContext } from "$lib/client/context.svelte";
+    import TodoSectionContainer from "$lib/components/TodoSectionContainer.svelte";
     import { onMount } from "svelte";
 
     let sectionName = $state("section")
-    let sections: TodoSectionWithTodosByPriority[] = $state({} as TodoSectionWithTodosByPriority[])
 
-    onMount(async () => {
-        sections = await todoService.getSectionsWithTodosPriority()
-
-        console.log("sections with todos:")
-        console.log(await todoService.getSectionsWithTodosPriority());
-    })
+    // Get the sections context
+    const sectionsContext = getSectionsContext()
 </script>
 
 <h1 class="text-center w-full">Guppy</h1>
 
 <div class="grid grid-cols-1">
-    <h2>Update Todos</h2>
+    <h2>Refresh Sections</h2>
         
-    <button aria-label="Create Section Button" onmousedown={async () => {sections = await todoService.getSectionsWithTodosPriority()}}>
+    <button aria-label="Create Section Button" onmousedown={sectionsContext.refreshSections}>
+        <div class="size-12 bg-yellow-500 active:bg-yellow-600"></div>
+    </button>
+</div>
+
+<div class="grid grid-cols-1">
+    <h2>Print Sections</h2>
+        
+    <button aria-label="Create Section Button" onmousedown={() => {console.log($state.snapshot(sectionsContext.sections))}}>
         <div class="size-12 bg-yellow-500 active:bg-yellow-600"></div>
     </button>
 </div>
@@ -32,12 +36,12 @@
         
         <span bind:textContent={sectionName} id="sectionName" class="min-w-16 inline-block border-2 border-amber-50" contenteditable="true"></span>
         
-        <button aria-label="Create Section Button" onmousedown={() => {todoService.createSection({name: sectionName})}}>
+        <button aria-label="Create Section Button" onmousedown={() => {todoService.createSection(sectionsContext, {name: sectionName})}}>
             <div class="size-12 bg-yellow-500 active:bg-yellow-600"></div>
         </button>
     </div>
     <div class='grid gap-4 w-full place-items-center p-4'>
-        {#each sections as section}
+        {#each sectionsContext.sections as section}
             <div class="w-[80%]">
                 <TodoSectionContainer section={section}></TodoSectionContainer>
             </div>

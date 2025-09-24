@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { TodoItem } from "$lib/server/db";
     import { todoService } from "$lib/client/todos";
+	import { getSectionsContext } from "$lib/client/context.svelte";
     import Checkbox from "./Checkbox.svelte";
 
     interface Props {
@@ -8,10 +9,11 @@
     }
     let { todo }: Props = $props()
 
+    let sectionsContext = getSectionsContext()
+
     async function handleCheckboxChange(newChecked: boolean) {
         console.log(todo.text + ": " + newChecked)
-        // TODO: update database
-        await todoService.updateTodo(todo.id, {completed: newChecked})
+        await todoService.updateTodo(sectionsContext, todo.id, {completed: newChecked})
     }
 </script>
 
@@ -24,7 +26,9 @@
         />
     </div>
     <span class='font-bold'>{todo.text}</span>
-    <button class='ml-auto' aria-label="delete todo button" onmousedown={async () => {todoService.deleteTodo(todo.id)}}>
+    <button class='ml-auto' aria-label="delete todo button" onmousedown={async () => {
+        await todoService.deleteTodo(sectionsContext, todo.id)
+        }}>
         <div class='size-4 bg-red-600'></div>
     </button>
 </div>

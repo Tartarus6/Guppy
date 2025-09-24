@@ -1,4 +1,5 @@
 import type { TodoItem, TodoSection, NewTodoItem, NewTodoSection } from '$lib/server/db';
+import type { SectionsContext } from './context.svelte';
 import { trpc } from '.';
 
 /**
@@ -86,25 +87,30 @@ export class TodoService {
 	/**
 	 * Create a new section
 	 */
-	async createSection(data: NewTodoSection): Promise<TodoSection> {
+	async createSection(sectionsContext: SectionsContext, data: NewTodoSection): Promise<TodoSection> {
 		const output = await trpc.sectionCreate.mutate(data)
+		sectionsContext.refreshSections()
 		return output
 	}
 
 	/**
 	 * Update an existing section
-	 * 'id' and 'createdAt' are omitted since they shouldn't be modified
+	 * 'id', 'createdAt', and 'updatedAt' are omitted since they shouldn't be modified or are handled by the server
 	 */
-	async updateSection(id: number, updates: Partial<Omit<TodoSection, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoSection | null> {
+	async updateSection(sectionsContext: SectionsContext, id: number, updates: Partial<Omit<TodoSection, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoSection | null> {
 		// Filter out updatedAt since it's handled on the server side
-		return await trpc.sectionUpdate.mutate({ id, ...updates });
+		const output = await trpc.sectionUpdate.mutate({ id, ...updates });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Delete a section and optionally move its todos
 	 */
-	async deleteSection(id: number, moveToSectionId?: number): Promise<boolean> {
-		return await trpc.sectionDelete.mutate({ id, moveToSectionId });
+	async deleteSection(sectionsContext: SectionsContext, id: number, moveToSectionId?: number): Promise<boolean> {
+		const output = await trpc.sectionDelete.mutate({ id, moveToSectionId });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	// ===== TODO OPERATIONS =====
@@ -141,52 +147,64 @@ export class TodoService {
 	/**
 	 * Create a new todo item
 	 */
-	async createTodo(data: NewTodoItem): Promise<TodoItem> {
+	async createTodo(sectionsContext: SectionsContext, data: NewTodoItem): Promise<TodoItem> {
 		const output = await trpc.todoCreate.mutate(data)
+		sectionsContext.refreshSections()
 		return output
 	}
 
 	/**
 	 * Update an existing todo
 	 */
-	async updateTodo(id: number, updates: Partial<Omit<TodoItem, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoItem | null> {
-		// Filter out updatedAt since it's handled on the server side
-		return await trpc.todoUpdate.mutate({ id, ...updates });
+	async updateTodo(sectionsContext: SectionsContext, id: number, updates: Partial<Omit<TodoItem, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoItem | null> {
+		const output = await trpc.todoUpdate.mutate({ id, ...updates });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Delete a todo item
 	 */
-	async deleteTodo(id: number): Promise<boolean> {
-		return await trpc.todoDelete.mutate(id);
+	async deleteTodo(sectionsContext: SectionsContext, id: number): Promise<boolean> {
+		const output = await trpc.todoDelete.mutate(id);
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Move todos to a different section
 	 */
-	async moveTodos(todoIds: number[], targetSectionId: number): Promise<TodoItem[]> {
-		return await trpc.todosMoveToSection.mutate({ todoIds, targetSectionId });
+	async moveTodos(sectionsContext: SectionsContext, todoIds: number[], targetSectionId: number): Promise<TodoItem[]> {
+		const output = await trpc.todosMoveToSection.mutate({ todoIds, targetSectionId });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Mark todos as completed/incomplete
 	 */
-	async markTodosCompleted(todoIds: number[], completed: boolean): Promise<TodoItem[]> {
-		return await trpc.todosMarkCompleted.mutate({ todoIds, completed });
+	async markTodosCompleted(sectionsContext: SectionsContext, todoIds: number[], completed: boolean): Promise<TodoItem[]> {
+		const output = await trpc.todosMarkCompleted.mutate({ todoIds, completed });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Set priority for multiple todos
 	 */
-	async setTodosPriority(todoIds: number[], priority: number): Promise<TodoItem[]> {
-		return await trpc.todosSetPriority.mutate({ todoIds, priority });
+	async setTodosPriority(sectionsContext: SectionsContext, todoIds: number[], priority: number): Promise<TodoItem[]> {
+		const output = await trpc.todosSetPriority.mutate({ todoIds, priority });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	/**
 	 * Set due date for todos
 	 */
-	async setTodosDueDate(todoIds: number[], dueDate: Date | null): Promise<TodoItem[]> {
-		return await trpc.todosSetDueDate.mutate({ todoIds, dueDate });
+	async setTodosDueDate(sectionsContext: SectionsContext, todoIds: number[], dueDate: Date | null): Promise<TodoItem[]> {
+		const output = await trpc.todosSetDueDate.mutate({ todoIds, dueDate });
+		sectionsContext.refreshSections()
+		return output
 	}
 
 	// ===== UTILITY METHODS =====
