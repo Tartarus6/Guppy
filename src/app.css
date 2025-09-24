@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+* {
+    color: white
+}
+
+body {
+    background: var(--color-slate-800);
+}
