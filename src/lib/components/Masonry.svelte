@@ -2,7 +2,7 @@
 	import { tick, type Snippet } from 'svelte';
 
 	interface MasonryProps {
-        class?: string;
+		class?: string;
 		stretchFirst?: boolean;
 		gridGap?: string;
 		colWidth?: string;
@@ -20,7 +20,7 @@
 	}
 
 	let {
-        class: clazz = '',
+		class: clazz = '',
 		stretchFirst = false,
 		gridGap = '0.5em',
 		colWidth = 'minmax(Min(20em, 100%), 1fr)',
@@ -110,7 +110,7 @@
 
 <div
 	bind:this={masonryElement}
-	class={`__grid--masonry ${stretchFirst ? '__stretch-first' : ''}` + clazz}
+	class={`__grid--masonry ${stretchFirst ? '__stretch-first' : ''} ${clazz}`}
 	style={`--col-width: ${colWidth};`}
 >
 	{@render children()}
@@ -122,8 +122,6 @@
 		grid-template-columns: repeat(auto-fit, var(--col-width));
 		grid-template-rows: masonry;
 		justify-content: center;
-		/* gap: var(--grid-gap); */
-		padding: var(--grid-gap);
 	}
 	:global(.__grid--masonry > *) {
 		align-self: start;

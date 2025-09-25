@@ -3,6 +3,8 @@
     import { getSectionsContext } from '$lib/client/context.svelte';
     import { todoService } from '$lib/client/todos';
     import TodoItemContainer from './TodoItemContainer.svelte';
+    import Popup from './Popup.svelte';
+    import type { Form, FormOutput } from './Popup.svelte';
 
     let sectionsContext = getSectionsContext()
 
@@ -11,8 +13,28 @@
     }
     const { section }: Props = $props()
 
-    let todoText = $state("todo")
-    let todoPriority = $state(0)
+    let showPopup = $state(false)
+
+    // Must be of type `Form`
+    let formInput: Form = {
+        "Todo Text": "",
+        "Priority": 0
+    }
+
+    async function handleCreateTodo(output: FormOutput) {
+        if (output) {
+            if (typeof output["Todo Text"] == 'string' && typeof output["Priority"] == 'number') {
+                await todoService.createTodo(sectionsContext, {
+                    text: output["Todo Text"], 
+                    priority: output["Priority"], 
+                    sectionId: section.id, 
+                    completed: false
+                })
+            }
+        }
+
+        showPopup = false
+    }
 </script>
 
 <div class='bg-slate-700 w-full'>
@@ -25,16 +47,15 @@
                 <div class='size-4 bg-red-600'></div>
             </button>
         </div>
-        <div class="grid grid-cols-1 border-2 border-red-500">
-            <h3>Create TODO</h3>
-            
-            <span bind:textContent={todoText} id="sectionName" class="inline-block border-2 border-amber-50" contenteditable="true"></span>
-            <input bind:value={todoPriority} type="number" class="inline-block border-2 border-amber-50">
-
-            <button aria-label="create todo button" onmousedown={async () => {await todoService.createTodo(sectionsContext, {text: todoText, priority: todoPriority, sectionId: section.id, completed: false})}}>
-                <div class="size-12 bg-yellow-500 active:bg-yellow-600"></div>
-            </button>
-        </div>
+        <button 
+            class="flex items-center justify-center size-8 bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors"
+            aria-label="add todo button" 
+            onmousedown={() => showPopup = true}
+        >
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+        </button>
         <div class='grid grid-cols-1 gap-4'>
             {#each (Object.keys(section.priorities) as string[]).map(Number).sort((a, b) => b-a) as priority}
                 <div>
@@ -49,3 +70,8 @@
         </div>
     </div>
 </div>
+
+<!-- Modal/Popup -->
+{#if showPopup}
+    <Popup inputs={formInput} submitText="Create" onSubmit={handleCreateTodo}></Popup>
+{/if}
