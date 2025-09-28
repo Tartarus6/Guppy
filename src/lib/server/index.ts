@@ -248,10 +248,10 @@ const appRouter = router({
         }
     }),
 
-    llmMessage: publicProcedure.input(z.object({systemMessage: z.string(), humanMessage: z.string()})).query(async (opts) => {
+    llmMessage: publicProcedure.input(z.string()).query(async (opts) => {
         const { input } = opts
 
-        let response = await sendLLMMessage(input.systemMessage, input.humanMessage)
+        let response = await sendLLMMessage(input)
         return response
     })
 })

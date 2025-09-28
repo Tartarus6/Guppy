@@ -1,9 +1,10 @@
 import { trpc } from '.';
+import type { SectionsContext } from './context.svelte';
 
 class LlmService {
-    async sendMessage(systemMessage: string, humanMessage: string) {
-        const response = await trpc.llmMessage.query({systemMessage, humanMessage})
-
+    async sendMessage(sectionsContext: SectionsContext, humanMessage: string) {
+        const response = await trpc.llmMessage.query(humanMessage)
+        sectionsContext.refreshSections()
         return response
     }
 }

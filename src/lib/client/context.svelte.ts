@@ -15,8 +15,6 @@ export function createSectionsContext(): SectionsContext {
 
     const refreshSections = async () => {
         sections = await todoService.getSectionsWithTodosPriority();
-        console.log("this is from the context:")
-        console.log($state.snapshot(sections))
     };
 
     const updateSections = (newSections: TodoSectionWithTodosByPriority[]) => {

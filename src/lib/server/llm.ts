@@ -32,7 +32,10 @@ async function initializeMCPClient(): Promise<experimental_MCPClient> {
     }
 }
 
-export async function sendLLMMessage(systemMessage: string, humanMessage: string) {
+export async function sendLLMMessage(humanMessage: string) {
+    const systemMessage = `You are the LLM in charge of interfacing with a todo app.
+You should take requests from the user and either complete the task, or retrieve the requested information and respond to the user.
+In order to complete your tasks, feel free to make inferences. For example, you can decide yourself which section to put a new todo item in based on context.`
     try {
         await initializeMCPClient();
         

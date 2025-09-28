@@ -126,7 +126,6 @@ class TodoService {
 			output = await trpc.todos.query()
 		}
 		
-		console.log(output)
 		return output
 	}
 

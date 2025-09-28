@@ -151,7 +151,6 @@ export async function getTodos(sectionId?: number, includeCompleted = true): Pro
         output = await trpc.todos.query()
     }
     
-    console.log(output)
     return output
 }
 

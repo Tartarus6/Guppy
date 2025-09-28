@@ -1,7 +1,7 @@
 <script lang="ts">
     interface Props {
         /** Whether the checkbox is checked */
-        checkedInitial?: boolean
+        checked: boolean
         /** Whether the checkbox is disabled */
         disabled?: boolean  
         /** Additional CSS classes */
@@ -13,14 +13,12 @@
     }
 
     let {
-        checkedInitial = false,
+        checked,
         disabled = false, 
         class: className = '', 
         ariaLabel = 'checkbox',
         onchange
     }: Props = $props()
-    
-    let checked = $state(checkedInitial)
 </script>
 
 <button 

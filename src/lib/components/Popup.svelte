@@ -60,7 +60,7 @@
                             <input 
                                 type="number" 
                                 bind:value={output[i].value}
-                                class="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                class="w-full"
                                 required={inputs[i].required ?? true}
                             />
                     </div>

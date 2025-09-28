@@ -12,7 +12,6 @@
     let sectionsContext = getSectionsContext()
 
     async function handleCheckboxChange(newChecked: boolean) {
-        console.log(todo.text + ": " + newChecked)
         await todoService.updateTodo(sectionsContext, todo.id, {completed: newChecked})
     }
 </script>
@@ -20,7 +19,7 @@
 <div class='bg-slate-600 flex flex-row'>
     <div class="mr-3 place-items-center flex">
         <Checkbox 
-            checkedInitial={todo.completed} 
+            checked={todo.completed} 
             onchange={handleCheckboxChange}
             ariaLabel="Mark todo as complete"
         />
