@@ -1,7 +1,14 @@
 import { groq } from '@ai-sdk/groq';
-import { experimental_createMCPClient, generateText, type experimental_MCPClient, type GenerateTextResult, type ToolSet, stepCountIs, Output } from 'ai';
+import Groq from 'groq-sdk';
+import { experimental_createMCPClient, generateText, type experimental_MCPClient, stepCountIs, Output, experimental_generateSpeech as generateSpeech } from 'ai';
 import { StdioClientTransport } from '@socotra/modelcontextprotocol-sdk/client/stdio.js';
+import fs from 'fs'
 import envProps from './envProps';
+import { getSections } from './db/trpc';
+
+const voiceLlm = new Groq({
+    apiKey: envProps.GROQ_API_KEY
+})
 
 // MCP Client for connecting to our MCP server
 let mcpClient: experimental_MCPClient;
@@ -35,16 +42,21 @@ async function initializeMCPClient(): Promise<experimental_MCPClient> {
 export async function sendLLMMessage(humanMessage: string) {
     const systemMessage = `You are the LLM in charge of interfacing with a todo app.
 You should take requests from the user and either complete the task, or retrieve the requested information and respond to the user.
-In order to complete your tasks, feel free to make inferences. For example, you can decide yourself which section to put a new todo item in based on context.`
+When running tool calls, make the names are correct (for example, "getSections" is correct, and "getSections:" is incorrect)
+In order to complete your tasks, feel free to make inferences. For example, you can decide yourself which section to put a new todo item in based on context.
+Give your responses as though they are spoken word and keep them simply formatted. When asked for information, provide only the information with no additional questions or details.
+The commands you are given might be poorly transcripted from audio, so words like "toodles" might actually be "todos".`
     try {
         await initializeMCPClient();
         
+        const tools = await mcpClient.tools();
+        
         const result = await generateText({
             model: groq(envProps.LLM_MODEL),
-            system: systemMessage,
+            system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
-            tools: await mcpClient.tools(),
-            stopWhen: stepCountIs(5)
+            tools,
+            stopWhen: stepCountIs(6)
         });
         
         // Extract the final text from the result
@@ -97,4 +109,40 @@ In order to complete your tasks, feel free to make inferences. For example, you 
         
         return result;
     }
+}
+
+export async function getSpeech(text: string) {
+    const speechFilePath = "data/speech.wav";
+    const model = "playai-tts";
+    const voice = "Mikail-PlayAI";
+    const responseFormat = "wav";
+
+    const response = await voiceLlm.audio.speech.create({
+        model,
+        voice,
+        input: text,
+        response_format: responseFormat
+    })
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await fs.promises.writeFile(speechFilePath, buffer)
+    
+    // Return the audio data as base64 so it can be played in the browser
+    return {
+        audioData: buffer.toString('base64'),
+        mimeType: 'audio/wav',
+        filePath: speechFilePath
+    }
+}
+
+export async function getText() {
+    const filePath = 'data/message.wav'
+    const model = 'whisper-large-v3-turbo'
+
+    const transcription = voiceLlm.audio.transcriptions.create({
+        file: fs.createReadStream(filePath),
+        model,
+    })
+
+    return transcription
 }

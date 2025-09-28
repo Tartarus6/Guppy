@@ -13,6 +13,9 @@
     let userMessage = $state("")
     let llmMessage = $state("")
     let llmThinkingStatus: 'done' | 'thinking' | 'error' = $state("done")
+    let isRecording = $state(false)
+    let mediaRecorder: MediaRecorder | null = null
+    let recordingError = $state("")
 
     let newSectionFormInput: Form = [
         {
@@ -32,17 +35,120 @@
         showNewSectionPopup = false
     }
 
+    async function toggleRecording() {
+        if (isRecording) {
+            // Stop recording
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop()
+            }
+            isRecording = false
+        } else {
+            // Start recording
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                mediaRecorder = new MediaRecorder(stream)
+                
+                let audioChunks: Blob[] = []
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data)
+                }
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' })
+                    
+                    try {
+                        // Save the audio to the expected file location
+                        await saveAudioFile(audioBlob)
+                        
+                        // Convert speech to text
+                        await convertSpeechToText()
+                        recordingError = ""
+                    } catch (error) {
+                        console.error('Error processing recording:', error)
+                        recordingError = 'Failed to process recording. Please try again.'
+                    }
+                    
+                    // Stop all tracks to free up the microphone
+                    stream.getTracks().forEach(track => track.stop())
+                }
+                
+                mediaRecorder.start()
+                isRecording = true
+                recordingError = ""
+            } catch (error) {
+                console.error('Error accessing microphone:', error)
+                recordingError = 'Unable to access microphone. Please check your permissions.'
+                isRecording = false
+            }
+        }
+    }
+
+    async function saveAudioFile(audioBlob: Blob) {
+        // Convert blob to array buffer and then to base64
+        const arrayBuffer = await audioBlob.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        const base64String = btoa(String.fromCharCode(...uint8Array))
+        
+        // Send to server to save as message.wav
+        try {
+            await llmService.saveAudio(base64String)
+        } catch (error) {
+            console.error('Error saving audio file:', error)
+            throw error
+        }
+    }
+
+    async function convertSpeechToText() {
+        try {
+            const response = await llmService.speechToText()
+            if (response && response.text) {
+                userMessage = response.text
+                await submitChatMessage()
+            } else {
+                recordingError = 'No speech detected. Please try speaking more clearly.'
+            }
+        } catch (error) {
+            console.error('Error converting speech to text:', error)
+            recordingError = 'Failed to convert speech to text. Please try again.'
+            throw error
+        }
+    }
+
     async function submitChatMessage() {
-        console.log(userMessage)
         llmThinkingStatus = 'thinking'
         try {
             let response = await llmService.sendMessage(sectionsContext, userMessage)
             llmThinkingStatus = 'done'
             userMessage = ''
-            console.log(response)
             llmMessage = response.text || ""
+
+            // Note: text to speech code is commented out due to low tokens per day allowance
+
+            /*
+            // text to speech
+            let audioResponse = await llmService.textToSpeech(llmMessage)
+            
+            // Play the audio if we received audio data
+            if (audioResponse?.audioData) {
+                const audioBlob = new Blob([
+                    Uint8Array.from(atob(audioResponse.audioData), c => c.charCodeAt(0))
+                ], { type: audioResponse.mimeType || 'audio/wav' })
+                
+                const audioUrl = URL.createObjectURL(audioBlob)
+                const audio = new Audio(audioUrl)
+                
+                audio.onended = () => {
+                    URL.revokeObjectURL(audioUrl) // Clean up memory
+                }
+                
+                audio.playbackRate = 1.25
+                audio.play().catch(console.error)
+            }
+            */
         } catch (e) {
             llmThinkingStatus = 'error'
+            console.log(e)
         }
     }
 </script>
@@ -50,17 +156,47 @@
 <h1 class="text-center w-full">Guppy</h1>
 
 <div class='flex w-full flex-col gap-2 bg-slate-700'>
-    <div class='flex place-self-start'>
+    <div class='flex flex-col place-self-start'>
         <form onsubmit={async (e) => {
             e.preventDefault()
 
             await submitChatMessage()
         }}>
             <input type="text" placeholder="Send a message to the LLM..." bind:value={userMessage} class='px-3 py-2 bg-slate-600 text-white border border-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent'>
-            <button type='submit' class='px-4 py-2 bg-green-600 text-white hover:bg-green-700 transition-colors'>
+            <button 
+                type='button' 
+                class={`px-4 py-2 text-white transition-colors ${isRecording ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'}`}
+                onclick={toggleRecording}
+                disabled={llmThinkingStatus === 'thinking'}
+                title={isRecording ? 'Stop recording' : 'Start recording'}
+            >
+                {#if isRecording}
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <rect x="6" y="6" width="8" height="8" rx="1"/>
+                    </svg>
+                {:else}
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 3a3 3 0 00-3 3v4a3 3 0 006 0V6a3 3 0 00-3-3zM4 10a1 1 0 112 0 6 6 0 1012 0 1 1 0 112 0 8 8 0 01-7 7.937V20h3a1 1 0 110 2H6a1 1 0 110-2h3v-2.063A8 8 0 012 10z"/>
+                    </svg>
+                {/if}
+            </button>
+            <button type='submit' class='px-4 py-2 bg-green-600 text-white hover:bg-green-700 transition-colors' disabled={llmThinkingStatus === 'thinking'}>
                 <span>Send</span>
             </button>
         </form>
+        {#if recordingError}
+            <div class="mt-2 text-red-400 text-sm">
+                {recordingError}
+            </div>
+        {/if}
+        {#if isRecording}
+            <div class="mt-2 text-blue-400 text-sm flex items-center gap-1">
+                <svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                    <circle cx="10" cy="10" r="3"/>
+                </svg>
+                Recording... Click the red button to stop
+            </div>
+        {/if}
     </div>
     <div class='flex place-self-end'>
         <!-- Thinking status indicator -->

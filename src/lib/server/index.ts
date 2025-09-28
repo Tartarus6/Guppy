@@ -4,7 +4,7 @@ import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
 import { publicProcedure, router } from './db/trpc'
 import { sections, todos, userSettings, commandHistory } from './db/schema'
-import { sendLLMMessage } from './llm'
+import { getSpeech, getText, sendLLMMessage } from './llm'
 import cors from 'cors'
 import envProps from "./envProps";
 
@@ -198,6 +198,33 @@ const appRouter = router({
             .returning()
         
         return output
+    }),
+
+    // Text to speech
+    textToSpeech: publicProcedure.input(z.string()).query(async (opts) => {
+        const { input } = opts
+
+        return await getSpeech(input)
+    }),
+
+    // Speech to text
+    speechToText: publicProcedure.query(async () => {
+        return await getText()
+    }),
+
+    // Save audio for speech to text
+    saveAudio: publicProcedure.input(z.string()).mutation(async (opts) => {
+        const { input } = opts
+        const fs = await import('fs')
+        
+        // Convert base64 to buffer
+        const audioBuffer = Buffer.from(input, 'base64')
+        
+        // Save to the expected location
+        const filePath = 'data/message.wav'
+        await fs.promises.writeFile(filePath, audioBuffer)
+        
+        return { success: true, filePath }
     }),
 
     // Get todo statistics

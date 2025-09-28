@@ -33,10 +33,12 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Docker deployable
 - Lost connection error for webpage (so that edits arent made then lost) (but still allow seeing the page)
 - Undo support
-- Make `Masonry.svlete` use tailwind
-- Fix `Masonry.svelte` width problem
-- Make the llm interface be provider agnostic
-- Move the server files to within svelte
+- (maybe) Make the llm interface be provider agnostic
+- (maybe) Switch to fully using grok-sdk
+- (maybe) Move the server files to within svelte
+- Masonry layout
+- Voice output
+- Voice input
 
 ## Goals
 - Mobile app (at least android)
