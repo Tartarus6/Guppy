@@ -33,7 +33,9 @@ async function initializeMCPClient(): Promise<experimental_MCPClient> {
 }
 
 export async function sendLLMMessage(systemMessage: string, humanMessage: string) {
-    try {        
+    try {
+        await initializeMCPClient();
+        
         const result = await generateText({
             model: groq(envProps.LLM_MODEL),
             system: systemMessage,
