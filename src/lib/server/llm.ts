@@ -88,10 +88,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
                 finalText = responseContent;
             }
         }
-        
-        console.log('Final text extracted:', finalText ? 'Found' : 'Not found');
-        console.log('Result.text:', result.text ? 'Present' : 'Undefined');
-        
+                
         return {
             ...result,
             text: finalText || 'No text response generated'

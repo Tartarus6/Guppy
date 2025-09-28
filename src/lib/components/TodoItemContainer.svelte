@@ -3,6 +3,7 @@
     import { todoService } from "$lib/client/todos";
 	import { getSectionsContext } from "$lib/client/context.svelte";
     import Checkbox from "./Checkbox.svelte";
+	import DeleteButton from "./DeleteButton.svelte";
 
     interface Props {
         todo: TodoItem
@@ -16,7 +17,7 @@
     }
 </script>
 
-<div class='bg-slate-600 flex flex-row'>
+<div class='bg-slate-600 flex flex-row rounded-lg'>
     <div class="mr-3 place-items-center flex">
         <Checkbox 
             checked={todo.completed} 
@@ -25,9 +26,7 @@
         />
     </div>
     <span class='font-bold {todo.completed ? 'line-through text-gray-400' : ''}'>{todo.text}</span>
-    <button class='ml-auto' aria-label="delete todo button" onmousedown={async () => {
+    <DeleteButton onmousedown={async () => {
         await todoService.deleteTodo(sectionsContext, todo.id)
-        }}>
-        <div class='size-4 bg-red-600'></div>
-    </button>
+    }}></DeleteButton>
 </div>

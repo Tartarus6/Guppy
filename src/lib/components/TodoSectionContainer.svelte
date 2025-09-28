@@ -5,6 +5,8 @@
     import TodoItemContainer from './TodoItemContainer.svelte';
     import Popup from './Popup.svelte';
     import type { Form, FormOutput } from './Popup.svelte';
+	import DeleteButton from './DeleteButton.svelte';
+	import AddButton from './AddButton.svelte';
 
     let sectionsContext = getSectionsContext()
 
@@ -44,24 +46,14 @@
     }
 </script>
 
-<div class='bg-slate-700 w-full'>
+<div class='bg-slate-700 w-full rounded-3xl'>
     <div class='p-4 grid grid-cols-1 gap-4'>
-        <div class='flex flex-row gap-4'>
+        <div class='flex flex-row place-items-center gap-4'>
             <h2 class=' break-normal'>{section.name}</h2>
-            <button 
-                class="flex size-8 bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors"
-                aria-label="add todo button" 
-                onmousedown={() => showPopup = true}
-            >
-                <svg class="text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                </svg>
-            </button>
-            <button class='flex ml-auto' aria-label="delete section button" onmousedown={async () => {
+            <AddButton onmousedown={() => {showPopup = true}}></AddButton>
+            <DeleteButton onmousedown={async () => {
                 await todoService.deleteSection(sectionsContext, section.id)
-                }}>
-                <div class='size-4 bg-red-600'></div>
-            </button>
+            }}></DeleteButton>
         </div>
     
         <div class='grid grid-cols-1 gap-4'>
