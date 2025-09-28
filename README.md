@@ -14,6 +14,12 @@ npm run dev
 # Optional (to open the page upon running): npm run dev -- --open
 ```
 
+### Project Structure Oddities
+While this is a svelte project, the server backend (running the database and llm api) is just node. This means that svelte features can only be used in the frontend side.
+
+This means that we can use `import { env } from '$env/dynamic/private';` to get the environment vairables within the svelte related files, but we would have to use `import dotenv from 'dotenv'` (but preferably use `envProps.ts`) in order to get the environment variables.
+
+
 ### Database Management
 If changes are made to the schema, the `.db` file will need to be updated.
 To do so run:
@@ -29,6 +35,8 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Undo support
 - Make `Masonry.svlete` use tailwind
 - Fix `Masonry.svelte` width problem
+- Make the llm interface be provider agnostic
+- Move the server files to within svelte
 
 ## Goals
 - Mobile app (at least android)
@@ -40,3 +48,4 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Automatic section coloring
 - Priority level labels
 - Optimistic client side state updates (remove a todo from the client side before waiting for the server to respond with the new state)
+- Display todo sections with masonry layout

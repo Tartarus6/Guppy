@@ -45,8 +45,13 @@
 		"vite": "^7.0.4"
 	},
 	"dependencies": {
+		"@ai-sdk/groq": "^2.0.22",
+		"@langchain/core": "^0.3.77",
+		"@langchain/groq": "^0.2.4",
+		"@socotra/modelcontextprotocol-sdk": "^1.18.0",
 		"@trpc/client": "^11.5.1",
 		"@trpc/server": "^11.5.1",
+		"ai": "^5.0.56",
 		"better-sqlite3": "^11.8.0",
 		"cors": "^2.8.5",
 		"dotenv": "^17.2.2",

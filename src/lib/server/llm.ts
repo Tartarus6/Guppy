@@ -1,97 +1,95 @@
-import type { TodoItem, TodoSection } from './db';
+import { groq } from '@ai-sdk/groq';
+import { experimental_createMCPClient, generateText, type experimental_MCPClient, type GenerateTextResult, type ToolSet, stepCountIs, Output } from 'ai';
+import { StdioClientTransport } from '@socotra/modelcontextprotocol-sdk/client/stdio.js';
+import envProps from './envProps';
 
-// LLM Provider types for different services
-export type LLMProvider = 'ollama' | 'openai' | 'groq' | 'together';
+// MCP Client for connecting to our MCP server
+let mcpClient: experimental_MCPClient;
 
-export interface LLMConfig {
-	provider: LLMProvider;
-	model: string;
-	baseUrl?: string;
-	apiKey?: string;
+async function initializeMCPClient(): Promise<experimental_MCPClient> {
+    if (mcpClient) {
+        return mcpClient;
+    }
+
+    try {
+        // Create transport to connect to MCP server via stdio
+        const transport = new StdioClientTransport({
+            command: 'npx',
+            args: ['tsx', 'src/lib/server/mcp.ts'],
+            cwd: process.cwd()
+        });
+
+        mcpClient = await experimental_createMCPClient({
+            transport
+        })
+
+        // await mcpClient.connect(transport);
+        console.log("MCP Client connected successfully");
+        return mcpClient;
+    } catch (error) {
+        console.error("Failed to initialize MCP client:", error);
+        throw error;
+    }
 }
 
-export interface LLMMessage {
-	role: 'system' | 'user' | 'assistant';
-	content: string;
-}
-
-export interface LLMTool {
-	name: string;
-	description: string;
-	parameters: {
-		type: 'object';
-		properties: Record<string, any>;
-		required?: string[];
-	};
-}
-
-export interface LLMResponse {
-	content?: string;
-	toolCalls?: ToolCall[];
-}
-
-export interface ToolCall {
-	name: string;
-	arguments: Record<string, any>;
-}
-
-// Current state of the todo system to provide context to the LLM
-export interface TodoContext {
-	sections: TodoSection[];
-	todos: TodoItem[];
-}
-
-export class LLMService {
-	private config: LLMConfig;
-
-	constructor(config: LLMConfig) {
-		this.config = config;
-	}
-
-	/**
-	 * Process a natural language command to modify the todo list
-	 * @param command - User's natural language command
-	 * @param context - Current state of todos and sections
-	 * @returns LLM response with potential tool calls
-	 */
-	async processCommand(command: string, context: TodoContext): Promise<LLMResponse> {
-		// TODO: Implement LLM API calls based on provider
-		// This will send the command and context to the LLM with available tools
-		throw new Error('Not implemented');
-	}
-
-	/**
-	 * Generate system prompt with current todo context
-	 */
-	private generateSystemPrompt(context: TodoContext): string {
-		// TODO: Create comprehensive system prompt that explains:
-		// - Available tools and their usage
-		// - Current todo state
-		// - How to interpret user commands
-		// - Examples of common operations
-		return '';
-	}
-
-	/**
-	 * Make API call to the configured LLM provider
-	 */
-	private async callLLM(messages: LLMMessage[], tools: LLMTool[]): Promise<LLMResponse> {
-		// TODO: Implement provider-specific API calls
-		// Switch based on this.config.provider and handle:
-		// - Ollama: Direct HTTP calls to local instance
-		// - OpenAI: OpenAI SDK
-		// - Groq: Groq SDK
-		// - Together: Together SDK
-		throw new Error('Not implemented');
-	}
-
-	/**
-	 * Validate and sanitize LLM responses
-	 */
-	private validateResponse(response: any): LLMResponse {
-		// TODO: Ensure the LLM response is properly formatted
-		// Validate tool calls have correct structure
-		// Handle malformed responses gracefully
-		throw new Error('Not implemented');
-	}
+export async function sendLLMMessage(systemMessage: string, humanMessage: string) {
+    try {        
+        const result = await generateText({
+            model: groq(envProps.LLM_MODEL),
+            system: systemMessage,
+            prompt: humanMessage,
+            tools: await mcpClient.tools(),
+            stopWhen: stepCountIs(5)
+        });
+        
+        // Extract the final text from the result
+        // The AI SDK should put the final text in result.text, but let's check alternative locations
+        let finalText = result.text;
+        
+        if (!finalText) {
+            // From your JSON output, the final text might be in the messages array
+            const messages = (result as any).messages;
+            if (messages && Array.isArray(messages)) {
+                // Find the last assistant message with text content
+                for (let i = messages.length - 1; i >= 0; i--) {
+                    const message = messages[i];
+                    if (message.role === 'assistant' && Array.isArray(message.content)) {
+                        const textContent = message.content.find((content: any) => content.type === 'text');
+                        if (textContent?.text) {
+                            finalText = textContent.text;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (!finalText) {
+            // Check if it's in the response body (alternative location)
+            const responseContent = (result as any).response?.body?.choices?.[0]?.message?.content;
+            if (responseContent) {
+                finalText = responseContent;
+            }
+        }
+        
+        console.log('Final text extracted:', finalText ? 'Found' : 'Not found');
+        console.log('Result.text:', result.text ? 'Present' : 'Undefined');
+        
+        return {
+            ...result,
+            text: finalText || 'No text response generated'
+        };
+    } catch (error) {
+        console.error("Error in sendLLMMessage:", error);
+        
+        // Fallback to basic generation without MCP
+        const result = await generateText({
+            model: groq(envProps.LLM_MODEL),
+            system: systemMessage,
+            prompt: humanMessage,
+            experimental_output: Output.text()
+        });
+        
+        return result;
+    }
 }

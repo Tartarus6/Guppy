@@ -3,16 +3,22 @@
 
     interface Props {
         inputs: Form
+        title: string
         submitText: String
         
         // Returns void to cancel
         onSubmit: (output: FormOutput) => (void|Promise<void>)
     }
 
-    export type Form = Record<string, (string|number)>
+    export type Form = {
+        label: string
+        value: string|number
+        placeholder?: string
+        required?: boolean
+    }[]
     export type FormOutput = Form | void
 
-    let { inputs, submitText, onSubmit }: Props = $props()
+    const { inputs, title, submitText, onSubmit }: Props = $props()
 
     let output = $state(inputs)
 </script>
@@ -31,32 +37,31 @@
     tabindex="-1"
 >
     <div class="bg-slate-700 p-6 w-96 max-w-full mx-4">
-        <h3 id="modal-title" class="text-white mb-4">Create New Todo</h3>
+        <h3 id="modal-title" class="text-white mb-4">{title}</h3>
         <form onsubmit={async (e) => {
             e.preventDefault()
             onSubmit(output)
         }}>
-            {#each Object.keys(output) as field}
-                {#if (typeof output[field] == 'string')}
+            {#each output.keys() as i}
+                {#if (typeof inputs[i].value == 'string')}
                     <div class="mb-4">
-                        <label for="todoText" class="block text-white text-sm font-medium mb-2">{field}</label>
+                        <label for="todoText" class="block text-white text-sm font-medium mb-2">{inputs[i].label}</label>
                         <input 
                             type="text" 
-                            bind:value={output[field]}
+                            bind:value={output[i].value}
                             class="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                            placeholder="Enter todo text..."
-                            required
+                            placeholder="{inputs[i].placeholder || ''}"
+                            required={inputs[i].required ?? true}
                         />
                     </div>
-                {:else if (typeof output[field] == 'number')}
+                {:else if (typeof inputs[i].value == 'number')}
                     <div class="mb-6">
-                        <label for="todoPriority" class="block text-white text-sm font-medium mb-2">{field}</label>
+                        <label for="todoPriority" class="block text-white text-sm font-medium mb-2">{inputs[i].label}</label>
                             <input 
                                 type="number" 
-                                bind:value={output[field]}
+                                bind:value={output[i].value}
                                 class="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                min="0"
-                                max="10"
+                                required={inputs[i].required ?? true}
                             />
                     </div>
                 {/if}

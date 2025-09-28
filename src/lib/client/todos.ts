@@ -6,7 +6,7 @@ import { trpc } from '.';
  * Todo Service - Business logic layer for todo operations
  * This service handles all CRUD operations for todos and sections
  */
-export class TodoService {
+class TodoService {
 	
 	// ===== SECTION OPERATIONS =====
 	
@@ -77,7 +77,7 @@ export class TodoService {
 	}
 
 	/**
-	 * Get a specific section by name
+	 * Get all sections
 	 */
 	async getSections(): Promise<TodoSection[]> {
 		const output = await trpc.sections.query()
@@ -126,6 +126,7 @@ export class TodoService {
 			output = await trpc.todos.query()
 		}
 		
+		console.log(output)
 		return output
 	}
 

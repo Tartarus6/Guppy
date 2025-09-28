@@ -4,11 +4,13 @@ import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
 import { publicProcedure, router } from './db/trpc'
 import { sections, todos, userSettings, commandHistory } from './db/schema'
+import { sendLLMMessage } from './llm'
 import cors from 'cors'
-import dotenv from 'dotenv';
-dotenv.config();
+import envProps from "./envProps";
 
-let listenPort = process.env.PORT
+import './mcp'
+
+let listenPort = envProps.PORT
 
 const appRouter = router({
     // Get all TODOs
@@ -244,6 +246,13 @@ const appRouter = router({
             byPriority,
             bySections
         }
+    }),
+
+    llmMessage: publicProcedure.input(z.object({systemMessage: z.string(), humanMessage: z.string()})).query(async (opts) => {
+        const { input } = opts
+
+        let response = await sendLLMMessage(input.systemMessage, input.humanMessage)
+        return response
     })
 })
 
@@ -255,7 +264,7 @@ const server = createHTTPServer({
             if (!origin) return callback(null, true);
 
             // In production, allow any origin that matches the expected pattern
-            if (process.env.NODE_ENV === 'production') {
+            if (envProps.NODE_ENV === 'production') {
                 // Allow any HTTPS origin, plus localhost for development
                 const allowedPatterns = [
                     /^https:\/\/.*$/, // Any HTTPS origin
