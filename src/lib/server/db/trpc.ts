@@ -1,9 +1,9 @@
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
-import envProps from '../envProps';
 import { createTRPCProxyClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '..';
 import type { TodoSection, TodoItem, NewTodoSection, NewTodoItem } from '.';
+import envProps from '../envProps';
 
 
 /**

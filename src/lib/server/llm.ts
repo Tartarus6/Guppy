@@ -3,11 +3,11 @@ import Groq from 'groq-sdk';
 import { experimental_createMCPClient, generateText, type experimental_MCPClient, stepCountIs, Output, experimental_generateSpeech as generateSpeech } from 'ai';
 import { StdioClientTransport } from '@socotra/modelcontextprotocol-sdk/client/stdio.js';
 import fs from 'fs'
-import envProps from './envProps';
-import { getSections } from './db/trpc';
+import { getSections } from '$lib/server/db/trpc';
+import { env } from '$env/dynamic/private';
 
 const voiceLlm = new Groq({
-    apiKey: envProps.GROQ_API_KEY
+    apiKey: env.GROQ_API_KEY
 })
 
 // MCP Client for connecting to our MCP server
@@ -52,7 +52,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
         const tools = await mcpClient.tools();
         
         const result = await generateText({
-            model: groq(envProps.LLM_MODEL),
+            model: groq(env.LLM_MODEL),
             system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
             tools,
@@ -98,7 +98,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
         
         // Fallback to basic generation without MCP
         const result = await generateText({
-            model: groq(envProps.LLM_MODEL),
+            model: groq(env.LLM_MODEL),
             system: systemMessage,
             prompt: humanMessage,
             experimental_output: Output.text()

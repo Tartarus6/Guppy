@@ -1,5 +1,5 @@
 import { trpc } from '.';
-import type { SectionsContext } from './context.svelte';
+import type { SectionsContext } from '$lib/client/context.svelte';
 
 class LlmService {
     async sendMessage(sectionsContext: SectionsContext, humanMessage: string) {

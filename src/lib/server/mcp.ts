@@ -2,8 +2,6 @@
 import { McpServer, ResourceTemplate } from "@socotra/modelcontextprotocol-sdk/server/mcp.js";
 import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/stdio.js";
 import { z } from "zod";
-import { db } from "./db";
-import { sections, todos, userSettings, commandHistory } from './db/schema'
 import { 
   getSections, 
   getTodos, 
@@ -21,7 +19,7 @@ import {
   markTodosCompleted,
   setTodosPriority,
   setTodosDueDate
-} from "./db/trpc";
+} from '$lib/server/db/trpc';
 
 // Create an MCP server
 const server = new McpServer({

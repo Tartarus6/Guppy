@@ -1,5 +1,5 @@
 import type { TodoItem, TodoSection, NewTodoItem, NewTodoSection } from '$lib/server/db';
-import type { SectionsContext } from './context.svelte';
+import type { SectionsContext } from '$lib/client/context.svelte';
 import { trpc } from '.';
 
 /**

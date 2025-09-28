@@ -3,22 +3,11 @@
 Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
 
 ```sh
-# Starting the backend server
-npx drizzle-kit push
-npm run start
-
-
-# Starting the frontend page
+# Starting the server
 npm run dev
 
 # Optional (to open the page upon running): npm run dev -- --open
 ```
-
-### Project Structure Oddities
-While this is a svelte project, the server backend (running the database and llm api) is just node. This means that svelte features can only be used in the frontend side.
-
-This means that we can use `import { env } from '$env/dynamic/private';` to get the environment vairables within the svelte related files, but we would have to use `import dotenv from 'dotenv'` (but preferably use `envProps.ts`) in order to get the environment variables.
-
 
 ### Database Management
 If changes are made to the schema, the `.db` file will need to be updated.

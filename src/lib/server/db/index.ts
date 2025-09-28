@@ -1,18 +1,17 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import Database from 'better-sqlite3';
-import * as schema from './schema';
-import envProps from '../envProps'
+import * as schema from '$lib/server/db/schema';
+import { env } from '$env/dynamic/private'
 
 // Database connection setup
-if (!envProps.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-const sqlite = new Database(envProps.DATABASE_URL);
+const sqlite = new Database(env.DATABASE_URL);
 
 export const db = drizzle(sqlite, { schema });
 
 // Export schema and types for use throughout the app
-export * from './schema';
 export type TodoItem = typeof schema.todos.$inferSelect;
 export type TodoSection = typeof schema.sections.$inferSelect;
 export type TodoSectionWithTodosByPriority = TodoSection & { priorities: Record<number, TodoItem[]> }

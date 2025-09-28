@@ -1,16 +1,15 @@
-import { db, initializeDatabase } from './db/index'
+import { db, initializeDatabase } from '$lib/server/db/index'
 import z from 'zod'
 import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
-import { publicProcedure, router } from './db/trpc'
-import { sections, todos, userSettings, commandHistory } from './db/schema'
-import { getSpeech, getText, sendLLMMessage } from './llm'
+import { publicProcedure, router } from '$lib/server/db/trpc'
+import { sections, todos, userSettings, commandHistory } from '$lib/server/db/schema'
+import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
 import cors from 'cors'
-import envProps from "./envProps";
+import { env } from '$env/dynamic/private'
+import '$lib/server/mcp'
 
-import './mcp'
-
-let listenPort = envProps.PORT
+let listenPort = env.PORT
 
 const appRouter = router({
     // Get all TODOs
@@ -291,7 +290,7 @@ const server = createHTTPServer({
             if (!origin) return callback(null, true);
 
             // In production, allow any origin that matches the expected pattern
-            if (envProps.NODE_ENV === 'production') {
+            if (env.NODE_ENV === 'production') {
                 // Allow any HTTPS origin, plus localhost for development
                 const allowedPatterns = [
                     /^https:\/\/.*$/, // Any HTTPS origin
@@ -328,7 +327,7 @@ const server = createHTTPServer({
 export type AppRouter = typeof appRouter;
 // TODO: export other useful types maybe
 
-async function startServer() {
+export async function startServer() {
     try {
         // await initializeDatabase();
         server.listen(listenPort);
@@ -338,5 +337,3 @@ async function startServer() {
         process.exit(1);
     }
 }
-
-startServer()
