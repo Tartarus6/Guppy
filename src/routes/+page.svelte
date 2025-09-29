@@ -247,7 +247,7 @@
                     </span>
                 {/if}
             </div>
-            <span class='px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-br-2xl'>{llmMessage || ''}</span>
+            <span class='px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-br-2xl'>{llmMessage || '​'}</span>
         </div>
     </div>
 </div>

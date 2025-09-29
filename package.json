@@ -4,7 +4,6 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"start": "npx tsx src/lib/server/index.ts",
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
