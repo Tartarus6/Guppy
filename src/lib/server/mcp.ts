@@ -70,12 +70,11 @@ server.registerTool("createSection",
     description: "Create a new todo section.",
     inputSchema: { 
       name: z.string(),
-      color: z.string().optional(),
       order: z.number().optional()
     }
   },
-  async ({ name, color, order }) => ({
-    content: [{ type: "text", text: JSON.stringify(await createSection({ name, color, order })) }]
+  async ({ name, order }) => ({
+    content: [{ type: "text", text: JSON.stringify(await createSection({ name, order })) }]
   })
 );
 
@@ -87,14 +86,12 @@ server.registerTool("updateSection",
     inputSchema: { 
       id: z.number(),
       name: z.string().optional(),
-      color: z.string().optional(),
       order: z.number().optional()
     }
   },
-  async ({ id, name, color, order }) => {
+  async ({ id, name, order }) => {
     const updates: any = {};
     if (name !== undefined) updates.name = name;
-    if (color !== undefined) updates.color = color;
     if (order !== undefined) updates.order = order;
     
     return {

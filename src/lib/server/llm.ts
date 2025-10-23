@@ -44,6 +44,7 @@ export async function sendLLMMessage(humanMessage: string) {
 You should take requests from the user and either complete the task, or retrieve the requested information and respond to the user.
 When running tool calls, make the names are correct (for example, "getSections" is correct, and "getSections:" is incorrect)
 In order to complete your tasks, feel free to make inferences. For example, you can decide yourself which section to put a new todo item in based on context.
+Also feel free to readily create new sections. If asked to make some grocery todos, create a grocery section if one doesnt exist.
 Give your responses as though they are spoken word and keep them simply formatted. When asked for information, provide only the information with no additional questions or details.
 The commands you are given might be poorly transcripted from audio, so words like "toodles" might actually be "todos".`
     try {
@@ -56,7 +57,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
             system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
             tools,
-            stopWhen: stepCountIs(6)
+            stopWhen: stepCountIs(7)
         });
         
         // Extract the final text from the result
@@ -96,15 +97,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
     } catch (error) {
         console.error("Error in sendLLMMessage:", error);
         
-        // Fallback to basic generation without MCP
-        const result = await generateText({
-            model: groq(env.LLM_MODEL),
-            system: systemMessage,
-            prompt: humanMessage,
-            experimental_output: Output.text()
-        });
-        
-        return result;
+        return null
     }
 }
 

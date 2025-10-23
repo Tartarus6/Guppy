@@ -4,7 +4,6 @@ import { sqliteTable, integer, text, real } from 'drizzle-orm/sqlite-core';
 export const sections = sqliteTable('sections', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	name: text('name').notNull(), // Section name like "Work", "High Priority", "Grocery"
-	color: text('color'), // Optional color for UI
 	order: integer('order').notNull().default(0), // For custom ordering
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())

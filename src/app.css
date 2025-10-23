@@ -1,6 +1,32 @@
 @import 'tailwindcss';
 
 
+@theme {
+  --color-hologram-50: oklch(0.966 0.014 64.36);
+  --color-hologram-100: oklch(0.924 0.034 65.95);
+  --color-hologram-200: oklch(0.849 0.08 70.73);
+  --color-hologram-300: oklch(0.781 0.098 73.1);
+  --color-hologram-400: oklch(0.7 0.088 73.04);
+  --color-hologram-500: oklch(0.606 0.076 73.14);
+  --color-hologram-600: oklch(0.512 0.064 73.31);
+  --color-hologram-700: oklch(0.414 0.052 72.29);
+  --color-hologram-800: oklch(0.329 0.042 74.32);
+  --color-hologram-900: oklch(0.235 0.029 74.92);
+  --color-hologram-950: oklch(0.179 0.023 76.86);
+  --color-hologram-50: oklch(0.964 0.017 236.65);
+  --color-hologram-100: oklch(0.92 0.038 231.02);
+  --color-hologram-200: oklch(0.84 0.082 226.47);
+  --color-hologram-300: oklch(0.768 0.107 224.9);
+  --color-hologram-400: oklch(0.691 0.097 225.45);
+  --color-hologram-500: oklch(0.613 0.086 225.02);
+  --color-hologram-600: oklch(0.521 0.073 225.2);
+  --color-hologram-700: oklch(0.427 0.06 225.03);
+  --color-hologram-800: oklch(0.325 0.045 223.92);
+  --color-hologram-900: oklch(0.23 0.032 224.63);
+  --color-hologram-950: oklch(0.185 0.027 227.79);
+}
+
+
 body {
     background: var(--color-slate-800);
     color: white;

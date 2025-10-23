@@ -46,7 +46,7 @@
     }
 </script>
 
-<div class='bg-slate-700 w-full rounded-3xl'>
+<div class='bg-hologram-700 border-2 border-hologram-300 w-full rounded-3xl'>
     <div class='p-4 grid grid-cols-1 gap-4'>
         <div class='flex flex-row place-items-center gap-4'>
             <h2 class=' break-normal'>{section.name}</h2>

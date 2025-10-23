@@ -17,7 +17,7 @@
     }
 </script>
 
-<div class='bg-slate-600 flex flex-row rounded-lg'>
+<div class='bg-hologram-600 flex flex-row rounded-lg'>
     <div class="mr-3 place-items-center flex">
         <Checkbox 
             checked={todo.completed} 
@@ -25,7 +25,7 @@
             ariaLabel="Mark todo as complete"
         />
     </div>
-    <span class='font-bold {todo.completed ? 'line-through text-gray-400' : ''}'>{todo.text}</span>
+    <span class='font-bold {todo.completed ? 'line-through text-hologram-400' : ''}'>{todo.text}</span>
     <DeleteButton onmousedown={async () => {
         await todoService.deleteTodo(sectionsContext, todo.id)
     }}></DeleteButton>

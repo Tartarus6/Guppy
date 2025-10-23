@@ -57,7 +57,6 @@ const appRouter = router({
     sectionUpdate: publicProcedure.input(z.object({
         id: z.number(),
         name: z.string().optional(),
-        color: z.string().nullable().optional(),
         order: z.number().optional()
     })).mutation(async (opts) => {
         const { input } = opts

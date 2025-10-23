@@ -23,11 +23,9 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Lost connection error for webpage (so that edits arent made then lost) (but still allow seeing the page)
 - Undo support
 - (maybe) Make the llm interface be provider agnostic
-- (maybe) Switch to fully using grok-sdk
-- (maybe) Move the server files to within svelte
+- (maybe) Switch to fully using groq-sdk
 - Masonry layout
 - Voice output
-- Voice input
 
 ## Goals
 - Mobile app (at least android)
