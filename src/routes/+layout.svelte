@@ -3,6 +3,8 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.png';
 	import { onMount } from 'svelte';
+	import { authService } from '$lib/client/auth';
+    import { goto } from '$app/navigation';
 
 	let { children } = $props();
 
@@ -11,6 +13,13 @@
 	setSectionsContext(sectionsContext)
 
 	onMount(async () => {
+		// Redirect based on authentication status
+        if (authService.isAuthenticated()) {
+            goto('/todos');
+        } else {
+            goto('/login');
+        }
+
 		await sectionsContext.refreshSections();
 	})
 </script>
