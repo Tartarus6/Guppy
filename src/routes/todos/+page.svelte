@@ -18,7 +18,7 @@
     let isRecording = $state(false)
     let mediaRecorder: MediaRecorder | null = null
     let recordingError = $state("")
-    let userInputElement: Element | null = $state(null)
+    let userInputElement: HTMLSpanElement | null = $state(null)
 
     let showNewSectionPopup = $state(false)
     
@@ -109,9 +109,10 @@
     async function convertSpeechToText() {
         try {
             const response = await llmService.speechToText()
-            if (response && response.text) {
-                userMessage = response.text
-                await submitChatMessage()
+            if (response && response.text && userInputElement) {
+                userMessage = response.text;
+                userInputElement.textContent = response.text;
+                // await submitChatMessage()
             } else {
                 recordingError = 'No speech detected. Please try speaking more clearly.'
             }
@@ -177,14 +178,17 @@
 <div class='bg-hologram-700 border-2 border-hologram-300 rounded-2xl overflow-clip'>
     <div class='p-1 flex w-full flex-col gap-2'>
         <div class='flex place-self-start max-w-[70%]'>
+            <!-- User Input Form -->
             <form onsubmit={async (e) => {
                 e.preventDefault()
 
                 await submitChatMessage()
             }}>
                 <div class='flex flex-row gap-1 place-items-center'>
-                    <div class='flex bg-hologram-600 rounded-tl-2xl place-items-center text-white border-hologram-500 border-2 focus-within:border-green-500'>
+                    <!-- Input Box -->
+                    <div class='flex bg-hologram-600 rounded-tl-xl rounded-lg place-items-center text-white border-hologram-500 border-2 focus-within:border-green-500'>
                         <div class='grid pr-2 w-full'>
+                            <!-- Editable Span for User Input -->
                             <span bind:this={userInputElement} onkeydown={async (e) => {
                                 if (e.key == 'Enter') {
                                     e.preventDefault()
@@ -192,8 +196,10 @@
                                     await submitChatMessage()
                                 }
                             }} role='textbox' tabindex={0} contenteditable={true} oninput={() => userInputChange()} class='w-full min-w-50 rounded-tl-2xl p-2 outline-none row-start-1 col-start-1 z-10'></span>
-                            <span class='w-full min-w-50 rounded-tl-2xl p-2 outline-none text-hologram-400 row-start-1 col-start-1'>{userMessage == '' ? 'Create a school todo for my CS homework...' : ''}</span>
+                            <!-- Placeholder Text -->
+                            <span class='w-full min-w-50 p-2 outline-none text-hologram-400 row-start-1 col-start-1'>{userMessage == '' ? 'Create a school todo for my CS homework...' : ''}</span>
                         </div>
+                        <!-- Recording button -->
                         <button 
                             type='button' 
                             class={`p-1 mx-1 h-fit flex rounded-full text-white transition-colors ${isRecording ? 'bg-red-500 hover:bg-red-600 animate-pulse' : 'bg-blue-500 hover:bg-blue-600'}`}
@@ -203,6 +209,7 @@
                             <span class='material-symbols-outlined'>{isRecording ? 'stop' : 'mic'}</span>
                         </button>
                     </div>
+                    <!-- Submit button -->
                     <div>
                         <button type='submit' class='flex place-items-center p-1 px-3 rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors' disabled={llmThinkingStatus === 'thinking'}>
                             <span class='material-symbols-outlined'>send</span>
@@ -277,7 +284,7 @@
                     </span>
                 {/if}
             </div>
-            <span class='px-3 py-2 max-h-100 overflow-scroll bg-hologram-600 border border-hologram-500 rounded-br-2xl {llmMessage ? 'text-white' : 'text-hologram-400'}'>{llmMessage || '...'}</span>
+            <span class='px-3 py-2 max-h-100 overflow-scroll bg-hologram-600 border-2 border-hologram-500 rounded-br-xl rounded-lg {llmMessage ? 'text-white' : 'text-hologram-400'}'>{llmMessage || '...'}</span>
         </div>
     </div>
 </div>

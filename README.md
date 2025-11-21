@@ -27,6 +27,9 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Masonry layout
 - Voice output
 
+## DONE
+- authentication
+
 ## Goals
 - Mobile app (at least android)
 - Android widget for quick access
