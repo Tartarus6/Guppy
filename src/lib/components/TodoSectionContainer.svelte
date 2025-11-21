@@ -3,17 +3,19 @@
     import { getSectionsContext } from '$lib/client/context.svelte';
     import { todoService } from '$lib/client/todos';
     import TodoItemContainer from './TodoItemContainer.svelte';
-    import Popup from './Popup.svelte';
-    import type { Form, FormOutput } from './Popup.svelte';
+    import FormPopup from './FormPopup.svelte';
+    import type { Form, FormOutput } from './FormPopup.svelte';
 	import DeleteButton from './DeleteButton.svelte';
 	import AddButton from './AddButton.svelte';
 
     let sectionsContext = getSectionsContext()
 
     interface Props {
-        section: TodoSectionWithTodosByPriority
+        section: TodoSectionWithTodosByPriority;
+        onmousedown?: (e?: any) => void;
+        big?: boolean;
     }
-    const { section }: Props = $props()
+    const props: Props = $props()
 
     let showPopup = $state(false)
 
@@ -36,7 +38,7 @@
                 await todoService.createTodo(sectionsContext, {
                     text: output[0].value,
                     priority: output[1].value,
-                    sectionId: section.id, 
+                    sectionId: props.section.id, 
                     completed: false
                 })
             }
@@ -48,21 +50,21 @@
 
 <div class='bg-hologram-700 border-2 border-hologram-300 w-full rounded-3xl'>
     <div class='p-4 grid grid-cols-1 gap-4'>
-        <div class='flex flex-row place-items-center gap-4'>
-            <h2 class=' break-normal'>{section.name}</h2>
+        <div class='flex flex-row place-items-center gap-4' onmousedown={(e) => {if (props.onmousedown && e.target === e.currentTarget) {props.onmousedown()}}} role="button" tabindex="0" aria-controls="modal-title">
+            <h2 class='break-normal'>{props.section.name}</h2>
             <AddButton onmousedown={() => {showPopup = true}}></AddButton>
             <DeleteButton onmousedown={async () => {
-                await todoService.deleteSection(sectionsContext, section.id)
+                await todoService.deleteSection(sectionsContext, props.section.id)
             }}></DeleteButton>
         </div>
     
         <div class='grid grid-cols-1 gap-4'>
-            {#each (Object.keys(section.priorities) as string[]).map(Number).sort((a, b) => b-a) as priority}
+            {#each (Object.keys(props.section.priorities) as string[]).map(Number).sort((a, b) => b-a) as priority}
                 <div>
                     <h3>Priority: {priority}</h3>
                     <div class='grid grid-cols-1 gap-1'>
-                        {#each section.priorities[priority] as todo}
-                            <TodoItemContainer todo={todo}></TodoItemContainer>
+                        {#each props.section.priorities[priority] as todo}
+                            <TodoItemContainer todo={todo} big={props.big || false}></TodoItemContainer>
                         {/each}
                     </div>
                 </div>
@@ -73,5 +75,5 @@
 
 <!-- Modal/Popup -->
 {#if showPopup}
-    <Popup inputs={formInput} title="Create TODO" submitText="Create" onSubmit={handleCreateTodo}></Popup>
+    <FormPopup inputs={formInput} title="Create TODO" submitText="Create" onSubmit={handleCreateTodo}></FormPopup>
 {/if}

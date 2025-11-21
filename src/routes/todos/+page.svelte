@@ -3,9 +3,11 @@
     import { llmService } from '$lib/client/llm';
 	import { getSectionsContext } from "$lib/client/context.svelte";
     import TodoSectionContainer from "$lib/components/TodoSectionContainer.svelte";
-    import Popup from '$lib/components/Popup.svelte';
-    import type { Form, FormOutput } from '$lib/components/Popup.svelte';
+    import FormPopup from '$lib/components/FormPopup.svelte';
+    import type { Form, FormOutput } from '$lib/components/FormPopup.svelte';
 	import AddButton from "$lib/components/AddButton.svelte";
+	import Popup from "$lib/components/Popup.svelte";
+	import type { TodoSectionWithTodosByPriority } from "$lib/server/db";
 
     // Get the sections context
     const sectionsContext = getSectionsContext()
@@ -18,6 +20,11 @@
     let recordingError = $state("")
     let userInputElement: Element | null = $state(null)
 
+    let showNewSectionPopup = $state(false)
+    
+    let showFocusSectionPopup = $state(false);
+    let focusedSection: TodoSectionWithTodosByPriority | null = $state(null);
+
     let newSectionFormInput: Form = [
         {
             label: "Name",
@@ -25,7 +32,6 @@
             placeholder: "Enter section name"
         }
     ]
-    let showNewSectionPopup = $state(false)
     async function handleCreateSection(output: FormOutput) {
         if (output) {
             if (typeof output[0].value == 'string') {
@@ -168,10 +174,6 @@
     }
 </script>
 
-<h1 class="text-center w-full">Guppy</h1>
-
-<div class='h-10'></div>
-
 <div class='bg-hologram-700 border-2 border-hologram-300 rounded-2xl overflow-clip'>
     <div class='p-1 flex w-full flex-col gap-2'>
         <div class='flex place-self-start max-w-[70%]'>
@@ -289,12 +291,18 @@
 
 <div class='flex flex-row flex-wrap gap-4'>
     {#each sectionsContext.sections as section}
-        <div class="flex min-w-100 flex-1">
-            <TodoSectionContainer section={section}></TodoSectionContainer>
+        <div class="flex min-w-100 flex-1" aria-controls="modal-title" tabindex="0" role="button">
+            <TodoSectionContainer section={section} onmousedown={() => {focusedSection = section; showFocusSectionPopup = true;}}></TodoSectionContainer>
         </div>
     {/each}
 </div>
 
 {#if showNewSectionPopup}
-    <Popup title="Create Section" submitText="Create" onSubmit={handleCreateSection} inputs={newSectionFormInput}></Popup>
+    <FormPopup title="Create Section" submitText="Create" onSubmit={handleCreateSection} inputs={newSectionFormInput}></FormPopup>
+{/if}
+
+{#if showFocusSectionPopup}
+    <Popup onSubmit={() => {showFocusSectionPopup = false; focusedSection = null;}}>
+        <TodoSectionContainer section={focusedSection!} big={true}></TodoSectionContainer>
+    </Popup>
 {/if}
