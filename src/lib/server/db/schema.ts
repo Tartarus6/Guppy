@@ -1,4 +1,5 @@
 import { sqliteTable, integer, text, real } from 'drizzle-orm/sqlite-core';
+import { string } from 'zod';
 
 // Sections represent different categories of todos (e.g., "Work", "Personal", "Grocery")
 export const sections = sqliteTable('sections', {
@@ -42,3 +43,14 @@ export const commandHistory = sqliteTable('command_history', {
 	executionTimeMs: real('execution_time_ms'), // Performance tracking
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 });
+
+// Authenticated sessions
+export const authenticatedSessions = sqliteTable('authenticated_sessions', {
+	id: text('id').primaryKey(),
+	userId: text('user_id'), // For future multi-user support (nullable for now)
+	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+	expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(), // Essential for cleanup
+	lastAccessedAt: integer('last_accessed_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+	ipAddress: text('ip_address'), // Optional: security tracking
+	userAgent: text('user_agent'), // Optional: security tracking
+})

@@ -2,31 +2,32 @@ import { db, initializeDatabase } from '$lib/server/db/index'
 import z from 'zod'
 import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
-import { publicProcedure, router } from '$lib/server/db/trpc'
-import { sections, todos, userSettings, commandHistory } from '$lib/server/db/schema'
+import { publicProcedure, protectedProcedure, router, type Context } from '$lib/server/db/trpc'
+import { sections, todos, userSettings, commandHistory, authenticatedSessions } from '$lib/server/db/schema'
 import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
 import cors from 'cors'
 import { env } from '$env/dynamic/private'
-import '$lib/server/mcp'
+import { validateCredentials } from '$lib/server/auth'
+import { createSession, destroySessionInDb } from '$lib/server/db/trpc'
 
 let listenPort = env.PORT
 
 const appRouter = router({
     // Get all TODOs
-    todos: publicProcedure.query(async () => {
+    todos: protectedProcedure.query(async () => {
         const output = await db.select().from(todos)
         return output
     }),
 
     // Get all TODOs matching the given section id
-    todosBySectionId: publicProcedure.input(z.int()).query(async (opts) => {
+    todosBySectionId: protectedProcedure.input(z.int()).query(async (opts) => {
         const { input } = opts
         const output = await db.select().from(todos).where(eq(todos.sectionId, input))
         return output
     }),
 
     // Get the TODO with the given id
-    todoById: publicProcedure.input(z.int()).query(async (opts) => {
+    todoById: protectedProcedure.input(z.int()).query(async (opts) => {
         const { input } = opts
         const output = await db.select().from(todos).where(eq(todos.id, input))
         return output
@@ -34,27 +35,27 @@ const appRouter = router({
 
     // TODO: implement optional due date
     // Create a todo with the given state
-    todoCreate: publicProcedure.input(z.object({sectionId: z.int(), text: z.string(), priority: z.int(), completed: z.boolean()})).mutation(async (opts) => {
+    todoCreate: protectedProcedure.input(z.object({sectionId: z.int(), text: z.string(), priority: z.int(), completed: z.boolean()})).mutation(async (opts) => {
         const { input } = opts
         const output = await db.insert(todos).values(input).returning()
         return output[0] // Return the first (and only) created todo
     }),
 
     // Get all sections
-    sections: publicProcedure.query(async () => {
+    sections: protectedProcedure.query(async () => {
         const output = await db.select().from(sections)
         return output
     }),
 
     // Create a section with the given state
-    sectionCreate: publicProcedure.input(z.object({name: z.string()})).mutation(async (opts) => {
+    sectionCreate: protectedProcedure.input(z.object({name: z.string()})).mutation(async (opts) => {
         const { input } = opts
         const output = await db.insert(sections).values(input).returning()
         return output[0]
     }),
 
     // Update a section
-    sectionUpdate: publicProcedure.input(z.object({
+    sectionUpdate: protectedProcedure.input(z.object({
         id: z.number(),
         name: z.string().optional(),
         order: z.number().optional()
@@ -69,7 +70,7 @@ const appRouter = router({
     }),
 
     // Delete a section
-    sectionDelete: publicProcedure.input(z.object({
+    sectionDelete: protectedProcedure.input(z.object({
         id: z.number(),
         moveToSectionId: z.number().optional()
     })).mutation(async (opts) => {
@@ -93,7 +94,7 @@ const appRouter = router({
     }),
 
     // Update a todo
-    todoUpdate: publicProcedure.input(z.object({
+    todoUpdate: protectedProcedure.input(z.object({
         id: z.number(),
         text: z.string().optional(),
         completed: z.boolean().optional(),
@@ -112,14 +113,14 @@ const appRouter = router({
     }),
 
     // Delete a todo
-    todoDelete: publicProcedure.input(z.number()).mutation(async (opts) => {
+    todoDelete: protectedProcedure.input(z.number()).mutation(async (opts) => {
         const { input } = opts
         const result = await db.delete(todos).where(eq(todos.id, input))
         return result.changes > 0
     }),
 
     // Find todos by text search
-    todosFindByText: publicProcedure.input(z.object({
+    todosFindByText: protectedProcedure.input(z.object({
         text: z.string(),
         sectionId: z.number().optional()
     })).query(async (opts) => {
@@ -135,7 +136,7 @@ const appRouter = router({
     }),
 
     // Move multiple todos to a different section
-    todosMoveToSection: publicProcedure.input(z.object({
+    todosMoveToSection: protectedProcedure.input(z.object({
         todoIds: z.array(z.number()),
         targetSectionId: z.number()
     })).mutation(async (opts) => {
@@ -151,7 +152,7 @@ const appRouter = router({
     }),
 
     // Mark multiple todos as completed/incomplete
-    todosMarkCompleted: publicProcedure.input(z.object({
+    todosMarkCompleted: protectedProcedure.input(z.object({
         todoIds: z.array(z.number()),
         completed: z.boolean()
     })).mutation(async (opts) => {
@@ -167,7 +168,7 @@ const appRouter = router({
     }),
 
     // Set priority for multiple todos
-    todosSetPriority: publicProcedure.input(z.object({
+    todosSetPriority: protectedProcedure.input(z.object({
         todoIds: z.array(z.number()),
         priority: z.number()
     })).mutation(async (opts) => {
@@ -183,7 +184,7 @@ const appRouter = router({
     }),
 
     // Set due date for multiple todos
-    todosSetDueDate: publicProcedure.input(z.object({
+    todosSetDueDate: protectedProcedure.input(z.object({
         todoIds: z.array(z.number()),
         dueDate: z.date().nullable()
     })).mutation(async (opts) => {
@@ -199,19 +200,19 @@ const appRouter = router({
     }),
 
     // Text to speech
-    textToSpeech: publicProcedure.input(z.string()).query(async (opts) => {
+    textToSpeech: protectedProcedure.input(z.string()).query(async (opts) => {
         const { input } = opts
 
         return await getSpeech(input)
     }),
 
     // Speech to text
-    speechToText: publicProcedure.query(async () => {
+    speechToText: protectedProcedure.query(async () => {
         return await getText()
     }),
 
     // Save audio for speech to text
-    saveAudio: publicProcedure.input(z.string()).mutation(async (opts) => {
+    saveAudio: protectedProcedure.input(z.string()).mutation(async (opts) => {
         const { input } = opts
         const fs = await import('fs')
         
@@ -226,7 +227,7 @@ const appRouter = router({
     }),
 
     // Get todo statistics
-    todoStats: publicProcedure.query(async () => {
+    todoStats: protectedProcedure.query(async () => {
         const now = new Date()
         
         // Get basic counts
@@ -273,16 +274,131 @@ const appRouter = router({
         }
     }),
 
-    llmMessage: publicProcedure.input(z.string()).query(async (opts) => {
-        const { input } = opts
+    llmMessage: protectedProcedure.input(z.string()).query(async (opts) => {
+        const { input, ctx } = opts
 
-        let response = await sendLLMMessage(input)
+        let response = await sendLLMMessage(input, ctx.sessionId!)
         return response
-    })
+    }),
+
+    validateCredentials: publicProcedure.input(z.object({username: z.string(), password: z.string()})).query(async (opts) => {
+        const { username, password } = opts.input
+        const valid = validateCredentials(username, password)
+
+        if (valid) {
+            return await createSession()
+        } else {
+            return null
+        }
+    }),
+
+    logout: protectedProcedure.mutation(async (opts) => {
+        const { ctx } = opts;
+        if (ctx.sessionId) {
+            await destroySessionInDb(ctx.sessionId);
+        }
+        return { success: true };
+    }),
+
+    // Session management procedures (internal use)
+    sessionCreate: publicProcedure.input(z.object({
+        userId: z.string().optional(),
+        ipAddress: z.string().optional(),
+        userAgent: z.string().optional(),
+        expirationDays: z.number().default(7)
+    })).mutation(async (opts) => {
+        const { input } = opts;
+        const sessionId = crypto.randomUUID();
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + input.expirationDays * 24 * 60 * 60 * 1000);
+
+        await db.insert(authenticatedSessions).values({
+            id: sessionId,
+            userId: input.userId || null,
+            createdAt: now,
+            expiresAt: expiresAt,
+            lastAccessedAt: now,
+            ipAddress: input.ipAddress || null,
+            userAgent: input.userAgent || null,
+        });
+
+        return sessionId;
+    }),
+
+    sessionValidate: publicProcedure.input(z.string()).query(async (opts) => {
+        const { input: sessionId } = opts;
+        const now = new Date();
+
+        const result = await db.select()
+            .from(authenticatedSessions)
+            .where(eq(authenticatedSessions.id, sessionId));
+
+        if (result.length === 0) {
+            return { valid: false };
+        }
+
+        const session = result[0];
+
+        // Check if session has expired
+        if (session.expiresAt < now) {
+            // Clean up expired session
+            await db.delete(authenticatedSessions)
+                .where(eq(authenticatedSessions.id, sessionId));
+            return { valid: false };
+        }
+
+        // Update last accessed time (sliding expiration)
+        await db.update(authenticatedSessions)
+            .set({ lastAccessedAt: now })
+            .where(eq(authenticatedSessions.id, sessionId));
+
+        return { valid: true };
+    }),
+
+    sessionDestroy: publicProcedure.input(z.string()).mutation(async (opts) => {
+        const { input: sessionId } = opts;
+        const result = await db.delete(authenticatedSessions)
+            .where(eq(authenticatedSessions.id, sessionId));
+        return result.changes > 0;
+    }),
+
+    sessionCleanup: publicProcedure.mutation(async () => {
+        const now = new Date();
+        const result = await db.delete(authenticatedSessions)
+            .where(sql`${authenticatedSessions.expiresAt} < ${now}`);
+        return { deletedCount: result.changes };
+    }),
 })
 
 const server = createHTTPServer({
     router: appRouter,
+    createContext(opts) {
+        // Check for session in header first (for internal calls), then fall back to cookie
+        const headerSessionId = opts.req.headers['x-session-id'] as string | undefined;
+        
+        if (headerSessionId) {
+            return {
+                sessionId: headerSessionId,
+            } satisfies Context;
+        }
+        
+        // Extract session from cookie header
+        const cookieHeader = opts.req.headers.cookie || '';
+        const cookies: Record<string, string> = {};
+        
+        if (cookieHeader) {
+            cookieHeader.split(';').forEach(cookie => {
+                const [key, ...valueParts] = cookie.trim().split('=');
+                if (key) {
+                    cookies[key] = valueParts.join('=');
+                }
+            });
+        }
+        
+        return {
+            sessionId: cookies.guppy_session,
+        } satisfies Context;
+    },
     middleware: cors({
         origin: (origin, callback) => {
             // Allow requests with no origin (like mobile apps or curl requests)
@@ -319,7 +435,7 @@ const server = createHTTPServer({
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'trpc-batch-mode']
+        allowedHeaders: ['Content-Type', 'Authorization', 'trpc-batch-mode', 'x-session-id']
     })
 })
 

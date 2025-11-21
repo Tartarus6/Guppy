@@ -1,37 +1,43 @@
 import { groq } from '@ai-sdk/groq';
 import Groq from 'groq-sdk';
 import { experimental_createMCPClient, generateText, type experimental_MCPClient, stepCountIs, Output, experimental_generateSpeech as generateSpeech } from 'ai';
-import { StdioClientTransport } from '@socotra/modelcontextprotocol-sdk/client/stdio.js';
+import { InMemoryTransport } from '@socotra/modelcontextprotocol-sdk/inMemory.js';
 import fs from 'fs'
 import { getSections } from '$lib/server/db/trpc';
 import { env } from '$env/dynamic/private';
+import { createMCPServer } from './mcp.js';
 
 const voiceLlm = new Groq({
     apiKey: env.GROQ_API_KEY
 })
 
-// MCP Client for connecting to our MCP server
-let mcpClient: experimental_MCPClient;
+// MCP Client cache per session
+const mcpClients = new Map<string, experimental_MCPClient>();
 
-async function initializeMCPClient(): Promise<experimental_MCPClient> {
-    if (mcpClient) {
-        return mcpClient;
+async function initializeMCPClient(sessionId: string): Promise<experimental_MCPClient> {
+    // Check if we already have a client for this session
+    const existingClient = mcpClients.get(sessionId);
+    if (existingClient) {
+        return existingClient;
     }
 
     try {
-        // Create transport to connect to MCP server via stdio
-        const transport = new StdioClientTransport({
-            command: 'npx',
-            args: ['tsx', 'src/lib/server/mcp.ts'],
-            cwd: process.cwd()
+        // Create in-memory transport pair (no separate process needed)
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        
+        // Start the MCP server with the server-side transport, bound to this session
+        const server = createMCPServer(sessionId);
+        await server.connect(serverTransport);
+        
+        // Create client with the client-side transport
+        const mcpClient = await experimental_createMCPClient({
+            transport: clientTransport
         });
 
-        mcpClient = await experimental_createMCPClient({
-            transport
-        })
+        // Cache the client for this session
+        mcpClients.set(sessionId, mcpClient);
 
-        // await mcpClient.connect(transport);
-        console.log("MCP Client connected successfully");
+        console.log(`MCP Client connected successfully for session ${sessionId.substring(0, 8)}...`);
         return mcpClient;
     } catch (error) {
         console.error("Failed to initialize MCP client:", error);
@@ -39,7 +45,7 @@ async function initializeMCPClient(): Promise<experimental_MCPClient> {
     }
 }
 
-export async function sendLLMMessage(humanMessage: string) {
+export async function sendLLMMessage(humanMessage: string, sessionId: string) {
     const systemMessage = `You are the LLM in charge of interfacing with a todo app.
 You should take requests from the user and either complete the task, or retrieve the requested information and respond to the user.
 When running tool calls, make the names are correct (for example, "getSections" is correct, and "getSections:" is incorrect)
@@ -48,13 +54,13 @@ Also feel free to readily create new sections. If asked to make some grocery tod
 Give your responses as though they are spoken word and keep them simply formatted. When asked for information, provide only the information with no additional questions or details.
 The commands you are given might be poorly transcripted from audio, so words like "toodles" might actually be "todos".`
     try {
-        await initializeMCPClient();
+        const mcpClient = await initializeMCPClient(sessionId);
         
         const tools = await mcpClient.tools();
         
         const result = await generateText({
             model: groq(env.LLM_MODEL),
-            system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
+            system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections(sessionId))}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
             tools,
             stopWhen: stepCountIs(7)

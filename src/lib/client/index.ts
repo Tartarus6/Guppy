@@ -1,5 +1,6 @@
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import { browser } from "$app/environment";
+import { goto } from "$app/navigation";
 import type { AppRouter } from "$lib/server";
 import superjson from 'superjson';
 
@@ -20,6 +21,23 @@ export const trpc = createTRPCProxyClient<AppRouter>({
         httpBatchLink({
             url: getApiUrl(),
             transformer: superjson,
+            // Include credentials (cookies) with every request
+            fetch(url, options) {
+                return fetch(url, {
+                    ...options,
+                    credentials: 'include',
+                });
+            },
         })
     ]
 });
+
+// Global error handler for tRPC errors
+export function handleTRPCError(error: any) {
+    if (browser && error?.data?.code === 'UNAUTHORIZED') {
+        // Clear session cookie
+        document.cookie = 'guppy_session=; max-age=0; path=/';
+        // Redirect to login
+        goto('/login');
+    }
+}

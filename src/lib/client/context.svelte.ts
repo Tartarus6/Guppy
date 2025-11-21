@@ -1,5 +1,6 @@
 import { getContext, setContext } from 'svelte';
 import { todoService } from '$lib/client/todos';
+import { handleTRPCError } from '$lib/client';
 import type { TodoSectionWithTodosByPriority } from '$lib/server/db';
 
 const SECTIONS_KEY = Symbol('sections');
@@ -14,7 +15,12 @@ export function createSectionsContext(): SectionsContext {
     let sections = $state<TodoSectionWithTodosByPriority[]>([]);
 
     const refreshSections = async () => {
-        sections = await todoService.getSectionsWithTodosPriority();
+        try {
+            sections = await todoService.getSectionsWithTodosPriority();
+        } catch (error) {
+            handleTRPCError(error);
+            throw error;
+        }
     };
 
     const updateSections = (newSections: TodoSectionWithTodosByPriority[]) => {
