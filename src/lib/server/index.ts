@@ -94,6 +94,7 @@ export async function cleanupExpiredSessions(): Promise<number> {
 
 /**
  * Add a changelog entry
+ * Removes any inactive entries prior to adding a new one
  */
 async function addChangelogEntry(
     entityType: string,
@@ -101,6 +102,10 @@ async function addChangelogEntry(
     previousState: string | null,
     newState: string | null
 ): Promise<void> {
+    // Remove inactive entries
+    await db.delete(changelog).where(eq(changelog.isActive, false));
+
+    // Add new entry
     await db.insert(changelog).values({
         entityType,
         entityId,
@@ -111,20 +116,31 @@ async function addChangelogEntry(
 }
 
 /**
- * Remove a changelog entry
+ * Set changelog entry active state
  */
-async function removeChangelogEntry(id: number): Promise<boolean> {
-    const result = await db.delete(changelog).where(eq(changelog.id, id));
+async function setChangelogEntryActiveState(id: number, isActive: boolean): Promise<boolean> {
+    const result = await db.update(changelog)
+        .set({ isActive })
+        .where(eq(changelog.id, id));
     return result.changes > 0;
 }
 
 /**
- * Get the latest changelog entry
+ * Get the latest active changelog entry
  */
-async function getLatestChangelogEntry() {
-    const output = await db.select().from(changelog).orderBy(sql`${changelog.id} DESC`).limit(1);
+async function getLatestActiveChangelogEntry() {
+    const output = await db.select().from(changelog).where(eq(changelog.isActive, true)).orderBy(sql`${changelog.id} DESC`).limit(1);
     return output[0] || null;
 }
+
+/**
+ * Get the most recently undone changelog entry
+ */
+async function getLatestUndoneChangelogEntry() {
+    const output = await db.select().from(changelog).where(eq(changelog.isActive, false)).orderBy(sql`${changelog.id} ASC`).limit(1);
+    return output[0] || null;
+}
+
 
 // ===== SECTION OPERATIONS =====
 
@@ -450,69 +466,147 @@ export async function getTodoStats(): Promise<{
 }
 
 /**
+ * Convert date strings to Date objects in parsed JSON
+ */
+function parseDates<T extends Record<string, any>>(obj: T): T {
+    const result = { ...obj };
+    for (const key in result) {
+        if (result[key] && typeof result[key] === 'string') {
+            // Check if it looks like an ISO date string
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(result[key])) {
+                result[key] = new Date(result[key]) as any;
+            }
+        }
+    }
+    return result;
+}
+
+/**
  * Undo the last change
  */
 export async function undo(): Promise<boolean> {
-    const latestEntry = await getLatestChangelogEntry();
+    const latestEntry = await getLatestActiveChangelogEntry();
     if (!latestEntry) {
         return false;
     }
 
     if (latestEntry.entityType === 'todo') {
         if (!latestEntry.newState && latestEntry.previousState) {
-            // It was deleted, so recreate
-            const prevTodo: TodoItem = JSON.parse(latestEntry.previousState);
-            await db.insert(todos).values(prevTodo);
-            await removeChangelogEntry(latestEntry.id);
-            return true;
+            // It was deleted, so recreate (without original ID to avoid conflicts)
+            const prevTodo: TodoItem = parseDates(JSON.parse(latestEntry.previousState));
+            const { id, ...todoWithoutId } = prevTodo;
+            const [recreated] = await db.insert(todos).values(todoWithoutId).returning();
+            // Update changelog to track the new ID
+            await db.update(changelog)
+                .set({ entityId: recreated.id })
+                .where(eq(changelog.id, latestEntry.id));
         }
 
         if (!latestEntry.previousState && latestEntry.newState) {
             // It was created, so delete (without logging)
             await db.delete(todos).where(eq(todos.id, latestEntry.entityId));
-            await removeChangelogEntry(latestEntry.id);
-            return true;
         }
 
         if (latestEntry.previousState && latestEntry.newState) {
             // It was updated, so revert (without logging)
-            const prevTodo: TodoItem = JSON.parse(latestEntry.previousState);
+            const prevTodo: TodoItem = parseDates(JSON.parse(latestEntry.previousState));
             await db.update(todos)
                 .set({ ...prevTodo, updatedAt: new Date() })
                 .where(eq(todos.id, latestEntry.entityId));
-            await removeChangelogEntry(latestEntry.id);
-            return true;
         }
     }
 
     if (latestEntry.entityType === 'section') {
         if (!latestEntry.newState && latestEntry.previousState) {
-            // It was deleted, so recreate
-            const prevSection: TodoSection = JSON.parse(latestEntry.previousState);
-            await db.insert(sections).values(prevSection);
-            await removeChangelogEntry(latestEntry.id);
-            return true;
+            // It was deleted, so recreate (without original ID to avoid conflicts)
+            const prevSection: TodoSection = parseDates(JSON.parse(latestEntry.previousState));
+            const { id, ...sectionWithoutId } = prevSection;
+            const [recreated] = await db.insert(sections).values(sectionWithoutId).returning();
+            // Update changelog to track the new ID
+            await db.update(changelog)
+                .set({ entityId: recreated.id })
+                .where(eq(changelog.id, latestEntry.id));
         }
 
         if (!latestEntry.previousState && latestEntry.newState) {
             // It was created, so delete (without logging)
             await db.delete(sections).where(eq(sections.id, latestEntry.entityId));
-            await removeChangelogEntry(latestEntry.id);
-            return true;
         }
 
         if (latestEntry.previousState && latestEntry.newState) {
             // It was updated, so revert (without logging)
-            const prevSection: TodoSection = JSON.parse(latestEntry.previousState);
+            const prevSection: TodoSection = parseDates(JSON.parse(latestEntry.previousState));
             await db.update(sections)
                 .set({ ...prevSection, updatedAt: new Date() })
                 .where(eq(sections.id, latestEntry.entityId));
-            await removeChangelogEntry(latestEntry.id);
-            return true;
         }
     }
 
-    return false;
+    await setChangelogEntryActiveState(latestEntry.id, false);
+    return true;
+}
+
+export async function redo(): Promise<boolean> {
+    const latestUndoneEntry = await getLatestUndoneChangelogEntry();
+
+    if (!latestUndoneEntry) {
+        return false;
+    }
+
+    if (latestUndoneEntry.entityType === 'todo') {
+        if (!latestUndoneEntry.previousState && latestUndoneEntry.newState) {
+            // It was created, so recreate (without original ID to avoid conflicts)
+            const newTodo: TodoItem = parseDates(JSON.parse(latestUndoneEntry.newState));
+            const { id, ...todoWithoutId } = newTodo;
+            const [recreated] = await db.insert(todos).values(todoWithoutId).returning();
+            // Update changelog to track the new ID
+            await db.update(changelog)
+                .set({ entityId: recreated.id })
+                .where(eq(changelog.id, latestUndoneEntry.id));
+        }
+
+        if (latestUndoneEntry.previousState && !latestUndoneEntry.newState) {
+            // It was deleted, so delete again (without logging)
+            await db.delete(todos).where(eq(todos.id, latestUndoneEntry.entityId));
+        }
+
+        if (latestUndoneEntry.previousState && latestUndoneEntry.newState) {
+            // It was updated, so reapply the update (without logging)
+            const newTodo: TodoItem = parseDates(JSON.parse(latestUndoneEntry.newState));
+            await db.update(todos)
+                .set({ ...newTodo, updatedAt: new Date() })
+                .where(eq(todos.id, latestUndoneEntry.entityId));
+        }
+    }
+
+    if (latestUndoneEntry.entityType === 'section') {
+        if (!latestUndoneEntry.previousState && latestUndoneEntry.newState) {
+            // It was created, so recreate (without original ID to avoid conflicts)
+            const newSection: TodoSection = parseDates(JSON.parse(latestUndoneEntry.newState));
+            const { id, ...sectionWithoutId } = newSection;
+            const [recreated] = await db.insert(sections).values(sectionWithoutId).returning();
+            // Update changelog to track the new ID
+            await db.update(changelog)
+                .set({ entityId: recreated.id })
+                .where(eq(changelog.id, latestUndoneEntry.id));
+        }
+
+        if (latestUndoneEntry.previousState && !latestUndoneEntry.newState) {
+            // It was deleted, so delete again (without logging)
+            await db.delete(sections).where(eq(sections.id, latestUndoneEntry.entityId));
+        }
+
+        if (latestUndoneEntry.previousState && latestUndoneEntry.newState) {
+            // It was updated, so reapply the update (without logging)
+            const newSection: TodoSection = parseDates(JSON.parse(latestUndoneEntry.newState));
+            await db.update(sections)
+                .set({ ...newSection, updatedAt: new Date() })
+                .where(eq(sections.id, latestUndoneEntry.entityId));
+        }
+    }
+
+    await setChangelogEntryActiveState(latestUndoneEntry.id, true);
+    return true;
 }
 
 // ===== TRPC ROUTER =====
@@ -672,6 +766,11 @@ const appRouter = router({
     // Undo last change
     undo: protectedProcedure.mutation(async () => {
         return await undo();
+    }),
+
+    // Redo last undone change
+    redo: protectedProcedure.mutation(async () => {
+        return await redo();
     }),
 
     llmMessage: protectedProcedure.input(z.string()).query(async (opts) => {

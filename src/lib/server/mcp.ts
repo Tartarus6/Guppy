@@ -21,6 +21,7 @@ import {
   setTodosPriority,
   setTodosDueDate,
   undo,
+  redo,
 } from '$lib/server';
 
 export function createMCPServer(sessionId: string) {
@@ -257,6 +258,18 @@ export function createMCPServer(sessionId: string) {
     },
     async () => ({
       content: [{ type: "text", text: JSON.stringify(await undo()) }]
+    })
+  );
+
+  // Redo latest undone change tool
+  server.registerTool("redo",
+    {
+      title: "Redo Latest Undone Change",
+      description: "Redo the latest undone change to todos or sections.",
+      inputSchema: {}
+    },
+    async () => ({
+      content: [{ type: "text", text: JSON.stringify(await redo()) }]
     })
   );
 

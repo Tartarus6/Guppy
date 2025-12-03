@@ -214,12 +214,27 @@ class TodoService {
 	// ===== CHANGELOG OPERATIONS =====
 	
 	/**
-	 * Undo the last change (uses centralized undo logic from server)
+	 * Undo the last change
 	 */
 	async undo(sectionsContext: SectionsContext): Promise<boolean> {
 		const success = await trpc.undo.mutate();
 		if (success) {
 			sectionsContext.refreshSections();
+		} else {
+			console.log('Undo operation failed. Probably no actions to undo.');
+		}
+		return success;
+	}
+
+	/**
+	 * Redo the last undone change
+	 */
+	async redo(sectionsContext: SectionsContext): Promise<boolean> {
+		const success = await trpc.redo.mutate();
+		if (success) {
+			sectionsContext.refreshSections();
+		} else {
+			console.log('Redo operation failed. Probably no actions to redo.');
 		}
 		return success;
 	}

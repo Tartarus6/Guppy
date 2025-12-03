@@ -21,14 +21,24 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - Create deployment instructions
 - Docker deployable
 - Lost connection error for webpage (so that edits arent made then lost) (but still allow seeing the page)
-- Undo support
 - (maybe) Make the llm interface be provider agnostic
 - (maybe) Switch to fully using groq-sdk
 - Masonry layout
-- Voice output
+- more intuitive section focus opening method
+- are you sure confirmation for big stuff like deleting section
+- custom favicon
+- pretty undo/redo buttons
+- fix bulk-modification undo/redo broken-ness
+- Add automatic database backups to guppy
+- Add rollback UI to guppy
+- Add persistent database files to guppy
+- Implement section renaming in UI with double click or whatever
+- hide completed todos (with toggle) on page load
 
 ## DONE
 - authentication
+- Undo support
+- Voice output (disabled, though)
 
 ## Goals
 - Mobile app (at least android)

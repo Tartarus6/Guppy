@@ -124,6 +124,11 @@
     }
 
     async function submitChatMessage() {
+        if (userMessage.trim() === '') {
+            console.log('User message is empty, not submitting.')
+            return
+        }
+
         llmThinkingStatus = 'thinking'
         try {
             llmMessage = ''
@@ -139,7 +144,7 @@
                 llmThinkingStatus = 'error'
             }
 
-            // Note: text to speech code is commented out due to low tokens per day allowance
+            // TODO: text to speech code is commented out due to low tokens per day allowance
 
             /*
             // text to speech

@@ -20,6 +20,25 @@
 		}
 		
 		await sectionsContext.refreshSections();
+
+		// Undo keyboard shortcut
+		window.addEventListener('keydown', async (e) => {
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+				e.preventDefault();
+				await todoService.undo(sectionsContext);
+				await sectionsContext.refreshSections();
+			}
+		});
+
+		// Redo keyboard shortcut
+		window.addEventListener('keydown', async (e) => {
+			// ctrl+shift+z or ctrl+y
+			if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') || ((e.ctrlKey || e.metaKey) && e.key === 'y')) {
+				e.preventDefault();
+				await todoService.redo(sectionsContext);
+				await sectionsContext.refreshSections();
+			}
+		});
 	})
 
 	async function handleLogout() {
@@ -39,14 +58,16 @@
 		<h1 class='text-2xl font-bold'>Guppy</h1>
 		<div>
 			<button 
-				onclick={() => {
-					todoService.undo(sectionsContext).then(() => {
-						sectionsContext.refreshSections();
-					});
-					}}
+				onclick={() => {todoService.undo(sectionsContext)}}
 				class='px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors'
 			>
 				Undo
+			</button>
+			<button 
+				onclick={() => todoService.redo(sectionsContext)}
+				class='px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors'
+			>
+				Redo
 			</button>
 			<button 
 				onclick={handleLogout}

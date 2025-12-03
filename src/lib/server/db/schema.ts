@@ -27,6 +27,7 @@ export const todos = sqliteTable('todos', {
 // Database changelog for undo/redo functionality
 export const changelog = sqliteTable('changelog', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
+	isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true), // true for active, false for undone
 	entityType: text('entity_type').notNull(), // "todo" or "section"
 	entityId: integer('entity_id').notNull(), // ID of the todo or section
 	previousState: text('previous_data'), // JSON string of previous state, null if new entity
