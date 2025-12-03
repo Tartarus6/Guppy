@@ -3,9 +3,12 @@ import Groq from 'groq-sdk';
 import { experimental_createMCPClient, generateText, type experimental_MCPClient, stepCountIs, Output, experimental_generateSpeech as generateSpeech } from 'ai';
 import { InMemoryTransport } from '@socotra/modelcontextprotocol-sdk/inMemory.js';
 import fs from 'fs'
-import { getSections } from '$lib/server/db/trpc';
+import { getSections } from '$lib/server';
 import { env } from '$env/dynamic/private';
 import { createMCPServer } from './mcp.js';
+
+// Ensure the GROQ_API_KEY is set in the environment
+process.env.GROQ_API_KEY = process.env.GROQ_API_KEY ?? env.GROQ_API_KEY;
 
 const voiceLlm = new Groq({
     apiKey: env.GROQ_API_KEY
@@ -60,7 +63,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
         
         const result = await generateText({
             model: groq(env.LLM_MODEL),
-            system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections(sessionId))}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
+            system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
             tools,
             stopWhen: stepCountIs(7)

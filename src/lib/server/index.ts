@@ -1,4 +1,4 @@
-import { db, initializeDatabase } from '$lib/server/db/index'
+import { db, initializeDatabase, type TodoItem, type TodoSection, type NewTodoItem, type NewTodoSection } from '$lib/server/db/index'
 import z from 'zod'
 import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
@@ -7,57 +7,551 @@ import { sections, todos, authenticatedSessions, changelog } from '$lib/server/d
 import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
 import { env } from '$env/dynamic/private'
 import { validateCredentials } from '$lib/server/auth'
-import { createSession, destroySessionInDb } from '$lib/server/db/trpc'
 
 let listenPort = 3000
+
+// ===== INTERNAL SESSION MANAGEMENT =====
+
+/**
+ * Create a new session
+ */
+export async function createSession(options?: {
+    userId?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    expirationDays?: number;
+}): Promise<string> {
+    const sessionId = crypto.randomUUID();
+    const now = new Date();
+    const expirationDays = options?.expirationDays || 7;
+    const expiresAt = new Date(now.getTime() + expirationDays * 24 * 60 * 60 * 1000);
+
+    await db.insert(authenticatedSessions).values({
+        id: sessionId,
+        userId: options?.userId || null,
+        createdAt: now,
+        expiresAt: expiresAt,
+        lastAccessedAt: now,
+        ipAddress: options?.ipAddress || null,
+        userAgent: options?.userAgent || null,
+    });
+
+    return sessionId;
+}
+
+/**
+ * Validate a session and update last accessed time
+ */
+export async function validateSessionInDb(sessionId: string): Promise<boolean> {
+    const now = new Date();
+
+    const result = await db.select()
+        .from(authenticatedSessions)
+        .where(eq(authenticatedSessions.id, sessionId));
+
+    if (result.length === 0) {
+        return false;
+    }
+
+    const session = result[0];
+
+    // Check if session has expired
+    if (session.expiresAt < now) {
+        // Clean up expired session
+        await db.delete(authenticatedSessions)
+            .where(eq(authenticatedSessions.id, sessionId));
+        return false;
+    }
+
+    // Update last accessed time (sliding expiration)
+    await db.update(authenticatedSessions)
+        .set({ lastAccessedAt: now })
+        .where(eq(authenticatedSessions.id, sessionId));
+
+    return true;
+}
+
+/**
+ * Destroy a session
+ */
+export async function destroySessionInDb(sessionId: string): Promise<boolean> {
+    const result = await db.delete(authenticatedSessions)
+        .where(eq(authenticatedSessions.id, sessionId));
+    return result.changes > 0;
+}
+
+/**
+ * Clean up expired sessions
+ */
+export async function cleanupExpiredSessions(): Promise<number> {
+    const now = new Date();
+    const result = await db.delete(authenticatedSessions)
+        .where(sql`${authenticatedSessions.expiresAt} < ${now}`);
+    return result.changes;
+}
+
+// ===== CHANGELOG OPERATIONS =====
+
+/**
+ * Add a changelog entry
+ */
+async function addChangelogEntry(
+    entityType: string,
+    entityId: number,
+    previousState: string | null,
+    newState: string | null
+): Promise<void> {
+    await db.insert(changelog).values({
+        entityType,
+        entityId,
+        previousState,
+        newState,
+        timestamp: new Date()
+    });
+}
+
+/**
+ * Remove a changelog entry
+ */
+async function removeChangelogEntry(id: number): Promise<boolean> {
+    const result = await db.delete(changelog).where(eq(changelog.id, id));
+    return result.changes > 0;
+}
+
+/**
+ * Get the latest changelog entry
+ */
+async function getLatestChangelogEntry() {
+    const output = await db.select().from(changelog).orderBy(sql`${changelog.id} DESC`).limit(1);
+    return output[0] || null;
+}
+
+// ===== SECTION OPERATIONS =====
+
+/**
+ * Get section by its id
+ */
+export async function getSectionById(id: number): Promise<TodoSection | null> {
+    const output = await db.select().from(sections).where(eq(sections.id, id));
+    return output[0] || null;
+}
+
+/**
+ * Get all sections
+ */
+export async function getSections(): Promise<TodoSection[]> {
+    const output = await db.select().from(sections);
+    return output;
+}
+
+/**
+ * Get all sections with their todos
+ */
+export async function getSectionsWithTodos(): Promise<(TodoSection & { todos: TodoItem[] })[]> {
+    const [sectionsData, todosData] = await Promise.all([
+        db.select().from(sections),
+        db.select().from(todos)
+    ]);
+
+    const todosBySection = todosData.reduce((acc, todo) => {
+        if (!acc[todo.sectionId]) {
+            acc[todo.sectionId] = [];
+        }
+        acc[todo.sectionId].push(todo);
+        return acc;
+    }, {} as Record<number, TodoItem[]>);
+
+    return sectionsData
+        .sort((a, b) => a.order - b.order)
+        .map(section => ({
+            ...section,
+            todos: (todosBySection[section.id] || []).sort((a, b) => a.order - b.order)
+        }));
+}
+
+/**
+ * Get all sections with their todos grouped by priority
+ */
+export async function getSectionsWithTodosPriority(): Promise<(TodoSection & { priorities: Record<number, TodoItem[]> })[]> {
+    const [sectionsData, todosData] = await Promise.all([
+        db.select().from(sections),
+        db.select().from(todos)
+    ]);
+
+    const todosByPriorityBySection = todosData.reduce((acc, todo) => {
+        if (!acc[todo.sectionId]) {
+            acc[todo.sectionId] = {};
+        }
+        if (!acc[todo.sectionId][todo.priority]) {
+            acc[todo.sectionId][todo.priority] = [];
+        }
+        acc[todo.sectionId][todo.priority].push(todo);
+        return acc;
+    }, {} as Record<number, Record<number, TodoItem[]>>);
+
+    return sectionsData
+        .sort((a, b) => a.order - b.order)
+        .map(section => {
+            const sectionPriorities = todosByPriorityBySection[section.id] || {};
+            const sortedPriorities: Record<number, TodoItem[]> = {};
+            
+            for (const [priority, todos] of Object.entries(sectionPriorities)) {
+                sortedPriorities[Number(priority)] = todos.sort((a, b) => a.order - b.order);
+            }
+            
+            return {
+                ...section,
+                priorities: sortedPriorities
+            };
+        });
+}
+
+/**
+ * Create a new section
+ */
+export async function createSection(data: NewTodoSection): Promise<TodoSection> {
+    const output = await db.insert(sections).values(data).returning();
+    const newSection = output[0];
+
+    await addChangelogEntry('section', newSection.id, null, JSON.stringify(newSection));
+
+    return newSection;
+}
+
+/**
+ * Update an existing section
+ */
+export async function updateSection(id: number, updates: Partial<Omit<TodoSection, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoSection | null> {
+    const previousState = await getSectionById(id);
+    
+    const output = await db.update(sections)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(sections.id, id))
+        .returning();
+    
+    const updatedSection = output[0] || null;
+    
+    if (updatedSection) {
+        await addChangelogEntry('section', id, JSON.stringify(previousState), JSON.stringify(updatedSection));
+    }
+    
+    return updatedSection;
+}
+
+/**
+ * Delete a section and optionally move its todos
+ */
+export async function deleteSection(id: number, moveToSectionId?: number): Promise<boolean> {
+    const previousState = await getSectionById(id);
+
+    if (moveToSectionId) {
+        await db.update(todos)
+            .set({ sectionId: moveToSectionId, updatedAt: new Date() })
+            .where(eq(todos.sectionId, id));
+    } else {
+        await db.delete(todos).where(eq(todos.sectionId, id));
+    }
+
+    const result = await db.delete(sections).where(eq(sections.id, id));
+    const success = result.changes > 0;
+    
+    if (success) {
+        await addChangelogEntry('section', id, JSON.stringify(previousState), null);
+    }
+    
+    return success;
+}
+
+// ===== TODO OPERATIONS =====
+
+/**
+ * Get all todos
+ */
+export async function getTodos(): Promise<TodoItem[]> {
+    const output = await db.select().from(todos);
+    return output;
+}
+
+/**
+ * Get all todos by section id
+ */
+export async function getTodosBySectionId(sectionId: number): Promise<TodoItem[]> {
+    const output = await db.select().from(todos).where(eq(todos.sectionId, sectionId));
+    return output;
+}
+
+/**
+ * Get a specific todo by ID
+ */
+export async function getTodoById(id: number): Promise<TodoItem | null> {
+    const result = await db.select().from(todos).where(eq(todos.id, id));
+    return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Find todos by text search
+ */
+export async function findTodosByText(text: string, sectionId?: number): Promise<TodoItem[]> {
+    const conditions = [like(todos.text, `%${text}%`)];
+    if (sectionId) {
+        conditions.push(eq(todos.sectionId, sectionId));
+    }
+    
+    return await db.select().from(todos).where(and(...conditions));
+}
+
+/**
+ * Create a new todo item
+ */
+export async function createTodo(data: NewTodoItem): Promise<TodoItem> {
+    const output = await db.insert(todos).values(data).returning();
+    const newTodo = output[0];
+
+    await addChangelogEntry('todo', newTodo.id, null, JSON.stringify(newTodo));
+
+    return newTodo;
+}
+
+/**
+ * Update an existing todo
+ */
+export async function updateTodo(id: number, updates: Partial<Omit<TodoItem, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoItem | null> {
+    const previousState = await getTodoById(id);
+    
+    const output = await db.update(todos)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(todos.id, id))
+        .returning();
+    
+    const updatedTodo = output[0] || null;
+    
+    if (updatedTodo) {
+        await addChangelogEntry('todo', id, JSON.stringify(previousState), JSON.stringify(updatedTodo));
+    }
+    
+    return updatedTodo;
+}
+
+/**
+ * Delete a todo item
+ */
+export async function deleteTodo(id: number): Promise<boolean> {
+    const previousState = await getTodoById(id);
+    
+    const result = await db.delete(todos).where(eq(todos.id, id));
+    const success = result.changes > 0;
+    
+    if (success) {
+        await addChangelogEntry('todo', id, JSON.stringify(previousState), null);
+    }
+    
+    return success;
+}
+
+/**
+ * Move todos to a different section
+ */
+export async function moveTodos(todoIds: number[], targetSectionId: number): Promise<TodoItem[]> {
+    const output = await db.update(todos)
+        .set({ sectionId: targetSectionId, updatedAt: new Date() })
+        .where(inArray(todos.id, todoIds))
+        .returning();
+    
+    return output;
+}
+
+/**
+ * Mark todos as completed/incomplete
+ */
+export async function markTodosCompleted(todoIds: number[], completed: boolean): Promise<TodoItem[]> {
+    const output = await db.update(todos)
+        .set({ completed, updatedAt: new Date() })
+        .where(inArray(todos.id, todoIds))
+        .returning();
+    
+    return output;
+}
+
+/**
+ * Set priority for multiple todos
+ */
+export async function setTodosPriority(todoIds: number[], priority: number): Promise<TodoItem[]> {
+    const output = await db.update(todos)
+        .set({ priority, updatedAt: new Date() })
+        .where(inArray(todos.id, todoIds))
+        .returning();
+    
+    return output;
+}
+
+/**
+ * Set due date for todos
+ */
+export async function setTodosDueDate(todoIds: number[], dueDate: Date | null): Promise<TodoItem[]> {
+    const output = await db.update(todos)
+        .set({ dueDate, updatedAt: new Date() })
+        .where(inArray(todos.id, todoIds))
+        .returning();
+    
+    return output;
+}
+
+/**
+ * Get todo statistics
+ */
+export async function getTodoStats(): Promise<{
+    total: number;
+    completed: number;
+    pending: number;
+    overdue: number;
+    byPriority: Record<string, number>;
+    bySections: Record<string, number>;
+}> {
+    const now = new Date();
+    
+    const totalTodos = await db.select({ count: count() }).from(todos);
+    const completedTodos = await db.select({ count: count() }).from(todos).where(eq(todos.completed, true));
+    const overdueTodos = await db.select({ count: count() }).from(todos)
+        .where(and(eq(todos.completed, false), sql`${todos.dueDate} < ${now}`));
+    
+    const priorityCounts = await db.select({ 
+        priority: todos.priority, 
+        count: count() 
+    }).from(todos).groupBy(todos.priority);
+    
+    const sectionCounts = await db.select({ 
+        sectionId: todos.sectionId, 
+        count: count() 
+    }).from(todos).groupBy(todos.sectionId);
+    
+    const total = totalTodos[0]?.count || 0;
+    const completed = completedTodos[0]?.count || 0;
+    const overdue = overdueTodos[0]?.count || 0;
+    
+    const byPriority: Record<string, number> = {};
+    priorityCounts.forEach(p => {
+        const label = p.priority === 1 ? 'high' : p.priority === -1 ? 'low' : 'medium';
+        byPriority[label] = p.count;
+    });
+    
+    const bySections: Record<string, number> = {};
+    sectionCounts.forEach(s => {
+        bySections[s.sectionId.toString()] = s.count;
+    });
+    
+    return {
+        total,
+        completed,
+        pending: total - completed,
+        overdue,
+        byPriority,
+        bySections
+    };
+}
+
+/**
+ * Undo the last change
+ */
+export async function undo(): Promise<boolean> {
+    const latestEntry = await getLatestChangelogEntry();
+    if (!latestEntry) {
+        return false;
+    }
+
+    if (latestEntry.entityType === 'todo') {
+        if (!latestEntry.newState && latestEntry.previousState) {
+            // It was deleted, so recreate
+            const prevTodo: TodoItem = JSON.parse(latestEntry.previousState);
+            await db.insert(todos).values(prevTodo);
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+
+        if (!latestEntry.previousState && latestEntry.newState) {
+            // It was created, so delete (without logging)
+            await db.delete(todos).where(eq(todos.id, latestEntry.entityId));
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+
+        if (latestEntry.previousState && latestEntry.newState) {
+            // It was updated, so revert (without logging)
+            const prevTodo: TodoItem = JSON.parse(latestEntry.previousState);
+            await db.update(todos)
+                .set({ ...prevTodo, updatedAt: new Date() })
+                .where(eq(todos.id, latestEntry.entityId));
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+    }
+
+    if (latestEntry.entityType === 'section') {
+        if (!latestEntry.newState && latestEntry.previousState) {
+            // It was deleted, so recreate
+            const prevSection: TodoSection = JSON.parse(latestEntry.previousState);
+            await db.insert(sections).values(prevSection);
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+
+        if (!latestEntry.previousState && latestEntry.newState) {
+            // It was created, so delete (without logging)
+            await db.delete(sections).where(eq(sections.id, latestEntry.entityId));
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+
+        if (latestEntry.previousState && latestEntry.newState) {
+            // It was updated, so revert (without logging)
+            const prevSection: TodoSection = JSON.parse(latestEntry.previousState);
+            await db.update(sections)
+                .set({ ...prevSection, updatedAt: new Date() })
+                .where(eq(sections.id, latestEntry.entityId));
+            await removeChangelogEntry(latestEntry.id);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// ===== TRPC ROUTER =====
 
 const appRouter = router({
     // Get all TODOs
     todos: protectedProcedure.query(async () => {
-        const output = await db.select().from(todos)
-        return output
+        return await getTodos();
     }),
 
     // Get all TODOs matching the given section id
     todosBySectionId: protectedProcedure.input(z.int()).query(async (opts) => {
-        const { input } = opts
-        const output = await db.select().from(todos).where(eq(todos.sectionId, input))
-        return output
+        return await getTodosBySectionId(opts.input);
     }),
 
     // Get the TODO with the given id
     todoById: protectedProcedure.input(z.int()).query(async (opts) => {
-        const { input } = opts
-        const output = await db.select().from(todos).where(eq(todos.id, input))
-        return output
+        const todo = await getTodoById(opts.input);
+        return todo ? [todo] : [];
     }),
 
-    // TODO: implement optional due date
     // Create a todo with the given state
     todoCreate: protectedProcedure.input(z.object({sectionId: z.int(), text: z.string(), priority: z.int(), completed: z.boolean()})).mutation(async (opts) => {
-        const { input } = opts
-        const output = await db.insert(todos).values(input).returning()
-        return output[0] // Return the first (and only) created todo
+        return await createTodo(opts.input);
     }),
 
     // Get section by id
     sectionById: publicProcedure.input(z.int()).query(async (opts) => {
-        const { input } = opts
-        const output = await db.select().from(sections).where(eq(sections.id, input))
-        return output[0] || null
+        return await getSectionById(opts.input);
     }),
 
     // Get all sections
     sections: protectedProcedure.query(async () => {
-        const output = await db.select().from(sections)
-        return output
+        return await getSections();
     }),
 
     // Create a section with the given state
     sectionCreate: protectedProcedure.input(z.object({name: z.string()})).mutation(async (opts) => {
-        const { input } = opts
-        const output = await db.insert(sections).values(input).returning()
-        return output[0]
+        return await createSection(opts.input);
     }),
 
     // Update a section
@@ -66,13 +560,8 @@ const appRouter = router({
         name: z.string().optional(),
         order: z.number().optional()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { id, ...updates } = input
-        const output = await db.update(sections)
-            .set({ ...updates, updatedAt: new Date() })
-            .where(eq(sections.id, id))
-            .returning()
-        return output[0] || null
+        const { id, ...updates } = opts.input;
+        return await updateSection(id, updates);
     }),
 
     // Delete a section
@@ -80,23 +569,8 @@ const appRouter = router({
         id: z.number(),
         moveToSectionId: z.number().optional()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { id, moveToSectionId } = input
-
-        // Handle todos in the section
-        if (moveToSectionId) {
-            // Move todos to another section
-            await db.update(todos)
-                .set({ sectionId: moveToSectionId, updatedAt: new Date() })
-                .where(eq(todos.sectionId, id))
-        } else {
-            // Delete all todos in the section
-            await db.delete(todos).where(eq(todos.sectionId, id))
-        }
-
-        // Delete the section
-        const result = await db.delete(sections).where(eq(sections.id, id))
-        return result.changes > 0
+        const { id, moveToSectionId } = opts.input;
+        return await deleteSection(id, moveToSectionId);
     }),
 
     // Update a todo
@@ -109,20 +583,13 @@ const appRouter = router({
         order: z.number().optional(),
         dueDate: z.date().optional().nullable()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { id, ...updates } = input
-        const output = await db.update(todos)
-            .set({ ...updates, updatedAt: new Date() })
-            .where(eq(todos.id, id))
-            .returning()
-        return output[0] || null
+        const { id, ...updates } = opts.input;
+        return await updateTodo(id, updates);
     }),
 
     // Delete a todo
     todoDelete: protectedProcedure.input(z.number()).mutation(async (opts) => {
-        const { input } = opts
-        const result = await db.delete(todos).where(eq(todos.id, input))
-        return result.changes > 0
+        return await deleteTodo(opts.input);
     }),
 
     // Find todos by text search
@@ -130,15 +597,8 @@ const appRouter = router({
         text: z.string(),
         sectionId: z.number().optional()
     })).query(async (opts) => {
-        const { input } = opts
-        const { text, sectionId } = input
-        
-        const conditions = [like(todos.text, `%${text}%`)]
-        if (sectionId) {
-            conditions.push(eq(todos.sectionId, sectionId))
-        }
-        
-        return await db.select().from(todos).where(and(...conditions))
+        const { text, sectionId } = opts.input;
+        return await findTodosByText(text, sectionId);
     }),
 
     // Move multiple todos to a different section
@@ -146,15 +606,8 @@ const appRouter = router({
         todoIds: z.array(z.number()),
         targetSectionId: z.number()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { todoIds, targetSectionId } = input
-        
-        const output = await db.update(todos)
-            .set({ sectionId: targetSectionId, updatedAt: new Date() })
-            .where(inArray(todos.id, todoIds))
-            .returning()
-        
-        return output
+        const { todoIds, targetSectionId } = opts.input;
+        return await moveTodos(todoIds, targetSectionId);
     }),
 
     // Mark multiple todos as completed/incomplete
@@ -162,15 +615,8 @@ const appRouter = router({
         todoIds: z.array(z.number()),
         completed: z.boolean()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { todoIds, completed } = input
-        
-        const output = await db.update(todos)
-            .set({ completed, updatedAt: new Date() })
-            .where(inArray(todos.id, todoIds))
-            .returning()
-        
-        return output
+        const { todoIds, completed } = opts.input;
+        return await markTodosCompleted(todoIds, completed);
     }),
 
     // Set priority for multiple todos
@@ -178,15 +624,8 @@ const appRouter = router({
         todoIds: z.array(z.number()),
         priority: z.number()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { todoIds, priority } = input
-        
-        const output = await db.update(todos)
-            .set({ priority, updatedAt: new Date() })
-            .where(inArray(todos.id, todoIds))
-            .returning()
-        
-        return output
+        const { todoIds, priority } = opts.input;
+        return await setTodosPriority(todoIds, priority);
     }),
 
     // Set due date for multiple todos
@@ -194,15 +633,8 @@ const appRouter = router({
         todoIds: z.array(z.number()),
         dueDate: z.date().nullable()
     })).mutation(async (opts) => {
-        const { input } = opts
-        const { todoIds, dueDate } = input
-        
-        const output = await db.update(todos)
-            .set({ dueDate, updatedAt: new Date() })
-            .where(inArray(todos.id, todoIds))
-            .returning()
-        
-        return output
+        const { todoIds, dueDate } = opts.input;
+        return await setTodosDueDate(todoIds, dueDate);
     }),
 
     // Text to speech
@@ -234,50 +666,12 @@ const appRouter = router({
 
     // Get todo statistics
     todoStats: protectedProcedure.query(async () => {
-        const now = new Date()
-        
-        // Get basic counts
-        const totalTodos = await db.select({ count: count() }).from(todos)
-        const completedTodos = await db.select({ count: count() }).from(todos).where(eq(todos.completed, true))
-        const overdueTodos = await db.select({ count: count() }).from(todos)
-            .where(and(eq(todos.completed, false), sql`${todos.dueDate} < ${now}`))
-        
-        // Get counts by priority
-        const priorityCounts = await db.select({ 
-            priority: todos.priority, 
-            count: count() 
-        }).from(todos).groupBy(todos.priority)
-        
-        // Get counts by section
-        const sectionCounts = await db.select({ 
-            sectionId: todos.sectionId, 
-            count: count() 
-        }).from(todos).groupBy(todos.sectionId)
-        
-        // Format the results
-        const total = totalTodos[0]?.count || 0
-        const completed = completedTodos[0]?.count || 0
-        const overdue = overdueTodos[0]?.count || 0
-        
-        const byPriority: Record<string, number> = {}
-        priorityCounts.forEach(p => {
-            const label = p.priority === 1 ? 'high' : p.priority === -1 ? 'low' : 'medium'
-            byPriority[label] = p.count
-        })
-        
-        const bySections: Record<string, number> = {}
-        sectionCounts.forEach(s => {
-            bySections[s.sectionId.toString()] = s.count
-        })
-        
-        return {
-            total,
-            completed,
-            pending: total - completed,
-            overdue,
-            byPriority,
-            bySections
-        }
+        return await getTodoStats();
+    }),
+
+    // Undo last change
+    undo: protectedProcedure.mutation(async () => {
+        return await undo();
     }),
 
     llmMessage: protectedProcedure.input(z.string()).query(async (opts) => {
@@ -288,13 +682,13 @@ const appRouter = router({
     }),
 
     validateCredentials: publicProcedure.input(z.object({username: z.string(), password: z.string()})).query(async (opts) => {
-        const { username, password } = opts.input
-        const valid = validateCredentials(username, password)
+        const { username, password } = opts.input;
+        const valid = validateCredentials(username, password);
 
         if (valid) {
-            return await createSession()
+            return await createSession();
         } else {
-            return null
+            return null;
         }
     }),
 
@@ -313,94 +707,21 @@ const appRouter = router({
         userAgent: z.string().optional(),
         expirationDays: z.number().default(7)
     })).mutation(async (opts) => {
-        const { input } = opts;
-        const sessionId = crypto.randomUUID();
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + input.expirationDays * 24 * 60 * 60 * 1000);
-
-        await db.insert(authenticatedSessions).values({
-            id: sessionId,
-            userId: input.userId || null,
-            createdAt: now,
-            expiresAt: expiresAt,
-            lastAccessedAt: now,
-            ipAddress: input.ipAddress || null,
-            userAgent: input.userAgent || null,
-        });
-
-        return sessionId;
+        return await createSession(opts.input);
     }),
 
     sessionValidate: publicProcedure.input(z.string()).query(async (opts) => {
-        const { input: sessionId } = opts;
-        const now = new Date();
-
-        const result = await db.select()
-            .from(authenticatedSessions)
-            .where(eq(authenticatedSessions.id, sessionId));
-
-        if (result.length === 0) {
-            return { valid: false };
-        }
-
-        const session = result[0];
-
-        // Check if session has expired
-        if (session.expiresAt < now) {
-            // Clean up expired session
-            await db.delete(authenticatedSessions)
-                .where(eq(authenticatedSessions.id, sessionId));
-            return { valid: false };
-        }
-
-        // Update last accessed time (sliding expiration)
-        await db.update(authenticatedSessions)
-            .set({ lastAccessedAt: now })
-            .where(eq(authenticatedSessions.id, sessionId));
-
-        return { valid: true };
+        const valid = await validateSessionInDb(opts.input);
+        return { valid };
     }),
 
     sessionDestroy: publicProcedure.input(z.string()).mutation(async (opts) => {
-        const { input: sessionId } = opts;
-        const result = await db.delete(authenticatedSessions)
-            .where(eq(authenticatedSessions.id, sessionId));
-        return result.changes > 0;
+        return await destroySessionInDb(opts.input);
     }),
 
     sessionCleanup: publicProcedure.mutation(async () => {
-        const now = new Date();
-        const result = await db.delete(authenticatedSessions)
-            .where(sql`${authenticatedSessions.expiresAt} < ${now}`);
-        return { deletedCount: result.changes };
-    }),
-
-    changelogAddEntry: protectedProcedure.input(z.object({
-        entityType: z.string(),
-        entityId: z.number(),
-        previousState: z.string().nullable(),
-        newState: z.string().nullable()
-    })).mutation(async (opts) => {
-        const { input } = opts;
-        const output = await db.insert(changelog).values({
-            entityType: input.entityType,
-            entityId: input.entityId,
-            previousState: input.previousState,
-            newState: input.newState,
-            timestamp: new Date()
-        }).returning();
-        return output[0];
-    }),
-
-    changelogRemoveEntry: protectedProcedure.input(z.number()).mutation(async (opts) => {
-        const { input } = opts;
-        const result = await db.delete(changelog).where(eq(changelog.id, input));
-        return result.changes > 0;
-    }),
-
-    changelogGetLatestEntry: protectedProcedure.mutation(async () => {
-        const output = await db.select().from(changelog).orderBy(sql`${changelog.id} DESC`).limit(1);
-        return output[0] || null;
+        const deletedCount = await cleanupExpiredSessions();
+        return { deletedCount };
     }),
 })
 

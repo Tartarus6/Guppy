@@ -17,9 +17,6 @@ export type TodoSection = typeof schema.sections.$inferSelect;
 export type TodoSectionWithTodosByPriority = TodoSection & { priorities: Record<number, TodoItem[]> }
 export type NewTodoItem = typeof schema.todos.$inferInsert;
 export type NewTodoSection = typeof schema.sections.$inferInsert;
-export type UserSettings = typeof schema.userSettings.$inferSelect;
-export type CommandHistory = typeof schema.commandHistory.$inferSelect;
-
 
 // Initialize database with tables if they don't exist
 export async function initializeDatabase() {

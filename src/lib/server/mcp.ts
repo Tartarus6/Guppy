@@ -11,6 +11,7 @@ import {
   updateSection,
   deleteSection,
   getTodoById,
+  getTodosBySectionId,
   findTodosByText,
   createTodo,
   updateTodo,
@@ -20,7 +21,7 @@ import {
   setTodosPriority,
   setTodosDueDate,
   undo,
-} from '$lib/server/db/trpc';
+} from '$lib/server';
 
 export function createMCPServer(sessionId: string) {
   // Create an MCP server
@@ -33,11 +34,11 @@ export function createMCPServer(sessionId: string) {
   server.registerTool("getTodos",
     {
       title: "Get Todos",
-      description: "Get all todo items. Filter to include completed todos.",
-      inputSchema: { sectionId: z.number(), includeCompleted: z.boolean().optional() },
+      description: "Get all todo items by section ID.",
+      inputSchema: { sectionId: z.number() },
     },
-    async ({ sectionId, includeCompleted }) => ({
-      content: [{ type: "text", text: JSON.stringify(await getTodos(sessionId, sectionId, includeCompleted)) }]
+    async ({ sectionId }) => ({
+      content: [{ type: "text", text: JSON.stringify(await getTodosBySectionId(sectionId)) }]
     })
   );
 
@@ -49,7 +50,7 @@ export function createMCPServer(sessionId: string) {
       inputSchema: {}
     },
     async () => ({
-      content: [{ type: "text", text: JSON.stringify(await getSections(sessionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await getSections()) }]
     })
   );
 
@@ -61,7 +62,7 @@ export function createMCPServer(sessionId: string) {
       inputSchema: {}
     },
     async () => ({
-      content: [{ type: "text", text: JSON.stringify(await getSectionsWithTodosPriority(sessionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await getSectionsWithTodosPriority()) }]
     })
   );
 
@@ -76,7 +77,7 @@ export function createMCPServer(sessionId: string) {
       }
     },
     async ({ name, order }) => ({
-      content: [{ type: "text", text: JSON.stringify(await createSection(sessionId, { name, order })) }]
+      content: [{ type: "text", text: JSON.stringify(await createSection({ name, order })) }]
     })
   );
 
@@ -97,7 +98,7 @@ export function createMCPServer(sessionId: string) {
       if (order !== undefined) updates.order = order;
       
       return {
-        content: [{ type: "text", text: JSON.stringify(await updateSection(sessionId, id, updates)) }]
+        content: [{ type: "text", text: JSON.stringify(await updateSection(id, updates)) }]
       };
     }
   );
@@ -113,7 +114,7 @@ export function createMCPServer(sessionId: string) {
       }
     },
     async ({ id, moveToSectionId }) => ({
-      content: [{ type: "text", text: JSON.stringify(await deleteSection(sessionId, id, moveToSectionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await deleteSection(id, moveToSectionId)) }]
     })
   );
 
@@ -125,7 +126,7 @@ export function createMCPServer(sessionId: string) {
       inputSchema: { id: z.number() }
     },
     async ({ id }) => ({
-      content: [{ type: "text", text: JSON.stringify(await getTodoById(sessionId, id)) }]
+      content: [{ type: "text", text: JSON.stringify(await getTodoById(id)) }]
     })
   );
 
@@ -140,7 +141,7 @@ export function createMCPServer(sessionId: string) {
       }
     },
     async ({ text, sectionId }) => ({
-      content: [{ type: "text", text: JSON.stringify(await findTodosByText(sessionId, text, sectionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await findTodosByText(text, sectionId)) }]
     })
   );
 
@@ -170,7 +171,7 @@ export function createMCPServer(sessionId: string) {
       }
       
       return {
-        content: [{ type: "text", text: JSON.stringify(await createTodo(sessionId, todoData)) }]
+        content: [{ type: "text", text: JSON.stringify(await createTodo(todoData)) }]
       };
     }
   );
@@ -200,7 +201,7 @@ export function createMCPServer(sessionId: string) {
       if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
       
       return {
-        content: [{ type: "text", text: JSON.stringify(await updateTodo(sessionId, id, updates)) }]
+        content: [{ type: "text", text: JSON.stringify(await updateTodo(id, updates)) }]
       };
     }
   );
@@ -213,7 +214,7 @@ export function createMCPServer(sessionId: string) {
       inputSchema: { id: z.number() }
     },
     async ({ id }) => ({
-      content: [{ type: "text", text: JSON.stringify(await deleteTodo(sessionId, id)) }]
+      content: [{ type: "text", text: JSON.stringify(await deleteTodo(id)) }]
     })
   );
 
@@ -228,7 +229,7 @@ export function createMCPServer(sessionId: string) {
       }
     },
     async ({ todoIds, targetSectionId }) => ({
-      content: [{ type: "text", text: JSON.stringify(await moveTodos(sessionId, todoIds, targetSectionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await moveTodos(todoIds, targetSectionId)) }]
     })
   );
 
@@ -243,7 +244,7 @@ export function createMCPServer(sessionId: string) {
       }
     },
     async ({ todoIds, completed }) => ({
-      content: [{ type: "text", text: JSON.stringify(await markTodosCompleted(sessionId, todoIds, completed)) }]
+      content: [{ type: "text", text: JSON.stringify(await markTodosCompleted(todoIds, completed)) }]
     })
   );
 
@@ -255,7 +256,7 @@ export function createMCPServer(sessionId: string) {
       inputSchema: {}
     },
     async () => ({
-      content: [{ type: "text", text: JSON.stringify(await undo(sessionId)) }]
+      content: [{ type: "text", text: JSON.stringify(await undo()) }]
     })
   );
 
