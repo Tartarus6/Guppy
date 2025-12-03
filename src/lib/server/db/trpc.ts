@@ -5,8 +5,10 @@ import type { AppRouter } from '..';
 import type { TodoSection, TodoItem, NewTodoSection, NewTodoItem } from '.';
 import envProps from '../envProps';
 import { db } from '.';
-import { sections as sectionsTable, todos as todosTable } from './schema';
+import { sections as sectionsTable, changelog, todos as todosTable } from './schema';
 import { eq, like, and, inArray } from 'drizzle-orm';
+import { get } from 'http';
+import { auth } from '@socotra/modelcontextprotocol-sdk/client/auth.js';
 
 // Define the context type
 export type Context = {
@@ -87,6 +89,17 @@ export function getAuthenticatedTrpc(sessionId: string) {
             })
         ]
     });
+}
+
+// ===== SECTION OPERATIONS =====
+
+/**
+ * Gets section by its id
+ */
+export async function getSectionById(sessionId: string, id: number): Promise<TodoSection | null> {
+    const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+    const output = await authenticatedTrpc.sectionById.query(id);
+    return output;
 }
 
 /**
@@ -170,7 +183,17 @@ export async function getSections(sessionId: string): Promise<TodoSection[]> {
  */
 export async function createSection(sessionId: string, data: NewTodoSection): Promise<TodoSection> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
     const output = await authenticatedTrpc.sectionCreate.mutate(data)
+
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'section',
+        entityId: output.id,
+        previousState: null,
+        newState: JSON.stringify(output),
+    });
+
     // sectionsContext.refreshSections()
     return output
 }
@@ -181,8 +204,20 @@ export async function createSection(sessionId: string, data: NewTodoSection): Pr
  */
 export async function updateSection(sessionId: string, id: number, updates: Partial<Omit<TodoSection, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoSection | null> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
+    const previousState = JSON.stringify(await getSectionById(sessionId, id));
+
     // Filter out updatedAt since it's handled on the server side
     const output = await authenticatedTrpc.sectionUpdate.mutate({ id, ...updates });
+
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'section',
+        entityId: id,
+        previousState: previousState,
+        newState: JSON.stringify(output),
+    });
+    
     // sectionsContext.refreshSections()
     return output
 }
@@ -192,6 +227,15 @@ export async function updateSection(sessionId: string, id: number, updates: Part
  */
 export async function deleteSection(sessionId: string, id: number, moveToSectionId?: number): Promise<boolean> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+    
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'section',
+        entityId: id,
+        previousState: JSON.stringify(getSectionById(sessionId, id)),
+        newState: null,
+    });
+
     const output = await authenticatedTrpc.sectionDelete.mutate({ id, moveToSectionId });
     // sectionsContext.refreshSections()
     return output
@@ -236,7 +280,17 @@ export async function findTodosByText(sessionId: string, text: string, sectionId
  */
 export async function createTodo(sessionId: string, data: NewTodoItem): Promise<TodoItem> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
     const output = await authenticatedTrpc.todoCreate.mutate(data)
+
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'todo',
+        entityId: output.id,
+        previousState: null,
+        newState: JSON.stringify(data),
+    });
+
     // sectionsContext.refreshSections()
     return output
 }
@@ -246,7 +300,19 @@ export async function createTodo(sessionId: string, data: NewTodoItem): Promise<
  */
 export async function updateTodo(sessionId: string, id: number, updates: Partial<Omit<TodoItem, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TodoItem | null> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
+    const previousState = JSON.stringify(await getTodoById(sessionId, id));
+
     const output = await authenticatedTrpc.todoUpdate.mutate({ id, ...updates });
+
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'todo',
+        entityId: id,
+        previousState: previousState,
+        newState: JSON.stringify(output)
+    });
+
     // sectionsContext.refreshSections()
     return output
 }
@@ -256,6 +322,15 @@ export async function updateTodo(sessionId: string, id: number, updates: Partial
  */
 export async function deleteTodo(sessionId: string, id: number): Promise<boolean> {
     const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
+    // Update changelog
+    authenticatedTrpc.changelogAddEntry.mutate({
+        entityType: 'todo',
+        entityId: id,
+        previousState: JSON.stringify(await getTodoById(sessionId, id)),
+        newState: null,
+    });
+
     const output = await authenticatedTrpc.todoDelete.mutate(id);
     // sectionsContext.refreshSections()
     return output
@@ -301,10 +376,66 @@ export async function setTodosDueDate(sessionId: string, todoIds: number[], dueD
     return output
 }
 
+
+// ==== Changelog Operations ====
+
+/**
+ * Undo the last change
+ * @param sessionId the session ID
+ * @returns true if successful, false otherwise
+ */
+export async function undo(sessionId: string): Promise<boolean> {
+    const authenticatedTrpc = getAuthenticatedTrpc(sessionId);
+
+    const latestEntry = await authenticatedTrpc.changelogGetLatestEntry.mutate();
+    if (!latestEntry) {
+        return false; // No entries to undo
+    }
+
+    if (latestEntry.entityType === 'todo') {
+        if (!latestEntry.newState) {
+            // it was deleted, so recreate
+            const newTodo: NewTodoItem = JSON.parse(latestEntry.previousState!);
+            await authenticatedTrpc.todoCreate.mutate(newTodo);
+
+            await authenticatedTrpc.changelogRemoveEntry.mutate(latestEntry.id);
+            return true;
+        }
+
+        if (latestEntry.previousState) {
+            // it was updated, so revert
+            const prevTodo: TodoItem = JSON.parse(latestEntry.previousState);
+            await updateTodo(sessionId, prevTodo.id, prevTodo)
+            return true;
+        }
+    }
+
+    if (latestEntry.entityType === 'section') {
+        if (!latestEntry.newState) {
+            // it was deleted, so recreate
+            const newSection: NewTodoSection = JSON.parse(latestEntry.previousState!);
+            await authenticatedTrpc.sectionCreate.mutate(newSection);
+            return true;
+        }
+
+        if (latestEntry.previousState) {
+            // it was updated, so revert
+            const prevSection: TodoSection = JSON.parse(latestEntry.previousState);
+            await updateSection(sessionId, prevSection.id, prevSection)
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 // ===== SESSION OPERATIONS =====
 
 /**
  * Create a new session
+ * @param options optional session parameters
+ * @returns the new session ID
  */
 export async function createSession(options?: {
     userId?: string;
@@ -322,6 +453,8 @@ export async function createSession(options?: {
 
 /**
  * Validate a session and update last accessed time
+ * @param sessionId the session ID to validate
+ * @returns true if valid, false otherwise
  */
 export async function validateSessionInDb(sessionId: string): Promise<boolean> {
     const result = await trpc.sessionValidate.query(sessionId);
@@ -330,6 +463,8 @@ export async function validateSessionInDb(sessionId: string): Promise<boolean> {
 
 /**
  * Destroy a session
+ * @param sessionId the session ID to destroy
+ * @returns boolean true if successfully destroyed, false otherwise
  */
 export async function destroySessionInDb(sessionId: string): Promise<boolean> {
     return await trpc.sessionDestroy.mutate(sessionId);
@@ -337,6 +472,7 @@ export async function destroySessionInDb(sessionId: string): Promise<boolean> {
 
 /**
  * Clean up expired sessions
+ * @returns number of deleted sessions
  */
 export async function cleanupExpiredSessions(): Promise<number> {
     const result = await trpc.sessionCleanup.mutate();

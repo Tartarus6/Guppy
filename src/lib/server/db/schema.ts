@@ -1,5 +1,6 @@
 import { sqliteTable, integer, text, real } from 'drizzle-orm/sqlite-core';
 import { string } from 'zod';
+import { en } from 'zod/locales';
 
 // Sections represent different categories of todos (e.g., "Work", "Personal", "Grocery")
 export const sections = sqliteTable('sections', {
@@ -21,6 +22,16 @@ export const todos = sqliteTable('todos', {
 	dueDate: integer('due_date', { mode: 'timestamp' }), // Optional due date
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
+});
+
+// Database changelog for undo/redo functionality
+export const changelog = sqliteTable('changelog', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	entityType: text('entity_type').notNull(), // "todo" or "section"
+	entityId: integer('entity_id').notNull(), // ID of the todo or section
+	previousState: text('previous_data'), // JSON string of previous state, null if new entity
+	newState: text('new_data'), // JSON string of new state, null if deleted
+	timestamp: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 });
 
 // Optional: User settings/preferences (for multi-user support later)

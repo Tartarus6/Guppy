@@ -11,6 +11,8 @@ class AuthService {
                 // Store session in a secure cookie
                 this.setSessionCookie(sessionToken);
                 return true;
+            } else {
+                console.log('Invalid credentials');
             }
             return false;
         } catch (error) {

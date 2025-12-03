@@ -3,7 +3,7 @@ import z from 'zod'
 import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
 import { publicProcedure, protectedProcedure, router, type Context } from '$lib/server/db/trpc'
-import { sections, todos, userSettings, commandHistory, authenticatedSessions } from '$lib/server/db/schema'
+import { sections, todos, userSettings, commandHistory, authenticatedSessions, changelog } from '$lib/server/db/schema'
 import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
 import cors from 'cors'
 import { env } from '$env/dynamic/private'
@@ -39,6 +39,13 @@ const appRouter = router({
         const { input } = opts
         const output = await db.insert(todos).values(input).returning()
         return output[0] // Return the first (and only) created todo
+    }),
+
+    // Get section by id
+    sectionById: publicProcedure.input(z.int()).query(async (opts) => {
+        const { input } = opts
+        const output = await db.select().from(sections).where(eq(sections.id, input))
+        return output[0] || null
     }),
 
     // Get all sections
@@ -367,6 +374,34 @@ const appRouter = router({
         const result = await db.delete(authenticatedSessions)
             .where(sql`${authenticatedSessions.expiresAt} < ${now}`);
         return { deletedCount: result.changes };
+    }),
+
+    changelogAddEntry: protectedProcedure.input(z.object({
+        entityType: z.string(),
+        entityId: z.number(),
+        previousState: z.string().nullable(),
+        newState: z.string().nullable()
+    })).mutation(async (opts) => {
+        const { input } = opts;
+        const output = await db.insert(changelog).values({
+            entityType: input.entityType,
+            entityId: input.entityId,
+            previousState: input.previousState,
+            newState: input.newState,
+            timestamp: new Date()
+        }).returning();
+        return output[0];
+    }),
+
+    changelogRemoveEntry: protectedProcedure.input(z.number()).mutation(async (opts) => {
+        const { input } = opts;
+        const result = await db.delete(changelog).where(eq(changelog.id, input));
+        return result.changes > 0;
+    }),
+
+    changelogGetLatestEntry: protectedProcedure.mutation(async () => {
+        const output = await db.select().from(changelog).orderBy(sql`${changelog.id} DESC`).limit(1);
+        return output[0] || null;
     }),
 })
 

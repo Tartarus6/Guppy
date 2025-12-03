@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createSectionsContext, setSectionsContext } from '$lib/client/context.svelte';
 	import { authService } from '$lib/client/auth';
+	import { todoService } from '$lib/client/todos';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import favicon from '$lib/assets/favicon.png';
@@ -36,12 +37,24 @@
 <div class='p-4'>
 	<div class='flex justify-between items-center mb-4'>
 		<h1 class='text-2xl font-bold'>Guppy</h1>
-		<button 
-			onclick={handleLogout}
-			class='px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors'
-		>
-			Logout
-		</button>
+		<div>
+			<button 
+				onclick={() => {
+					todoService.undo(sectionsContext).then(() => {
+						sectionsContext.refreshSections();
+					});
+					}}
+				class='px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors'
+			>
+				Undo
+			</button>
+			<button 
+				onclick={handleLogout}
+				class='px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors'
+			>
+				Logout
+			</button>
+		</div>
 	</div>
 	{@render children?.()}
 </div>

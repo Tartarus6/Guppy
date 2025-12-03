@@ -18,7 +18,8 @@ import {
   moveTodos,
   markTodosCompleted,
   setTodosPriority,
-  setTodosDueDate
+  setTodosDueDate,
+  undo,
 } from '$lib/server/db/trpc';
 
 export function createMCPServer(sessionId: string) {
@@ -243,6 +244,18 @@ export function createMCPServer(sessionId: string) {
     },
     async ({ todoIds, completed }) => ({
       content: [{ type: "text", text: JSON.stringify(await markTodosCompleted(sessionId, todoIds, completed)) }]
+    })
+  );
+
+  // Undo latest change tool
+  server.registerTool("undo",
+    {
+      title: "Undo Latest Change",
+      description: "Undo the latest change made to todos or sections.",
+      inputSchema: {}
+    },
+    async () => ({
+      content: [{ type: "text", text: JSON.stringify(await undo(sessionId)) }]
     })
   );
 

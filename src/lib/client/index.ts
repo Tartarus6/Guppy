@@ -4,7 +4,7 @@ import { goto } from "$app/navigation";
 import type { AppRouter } from "$lib/server";
 import superjson from 'superjson';
 
-// TODO: make port determined my `.env`, rather than being hard coded
+// TODO: make port determined by `.env`, rather than being hard coded. somehow
 
 // Determine the API URL based on environment
 const getApiUrl = () => {

@@ -3,7 +3,7 @@ import type { SectionsContext } from '$lib/client/context.svelte';
 import { trpc } from '.';
 
 /**
- * Todo Service - Business logic layer for todo operations
+ * Todo Service - Client logic layer for todo operations
  * This service handles all CRUD operations for todos and sections
  */
 class TodoService {
@@ -221,6 +221,75 @@ class TodoService {
 		bySections: Record<string, number>;
 	}> {
 		return await trpc.todoStats.query();
+	}
+
+	// ===== CHANGELOG OPERATIONS =====
+	
+	/**
+	 * Undo the last change
+	 * @param sessionId the session ID
+	 * @returns true if successful, false otherwise
+	 */
+	async undo(sectionsContext: SectionsContext): Promise<boolean> {
+		const latestEntry = await trpc.changelogGetLatestEntry.mutate();
+		if (!latestEntry) {
+			console.log('No changelog entries to undo');
+			return false; // No entries to undo
+		}
+
+		console.log('Undoing changelog entry:', latestEntry);
+	
+		if (latestEntry.entityType === 'todo') {
+			if (!latestEntry.newState) {
+				// it was deleted, so recreate
+				const newTodo: NewTodoItem = JSON.parse(latestEntry.previousState!);
+				await trpc.todoCreate.mutate(newTodo);
+	
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			}
+	
+			if (!latestEntry.previousState) {
+				// it was created, so delete
+				const newTodo: NewTodoItem = JSON.parse(latestEntry.newState);
+				console.log('Deleting todo created:', newTodo);
+				await this.deleteTodo(sectionsContext, latestEntry.entityId)
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			} else {
+				// it was updated, so revert
+				const prevTodo: NewTodoItem = JSON.parse(latestEntry.previousState);
+				await this.updateTodo(sectionsContext, latestEntry.entityId, prevTodo)
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			}
+		}
+	
+		if (latestEntry.entityType === 'section') {
+			if (!latestEntry.newState) {
+				// it was deleted, so recreate
+				const newSection: NewTodoSection = JSON.parse(latestEntry.previousState!);
+				await trpc.sectionCreate.mutate(newSection);
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			}
+	
+			if (!latestEntry.previousState) {
+				// it was created, so delete
+				const newSection: NewTodoSection = JSON.parse(latestEntry.newState);
+				await this.deleteSection(sectionsContext, latestEntry.entityId)
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			} else {
+				// it was updated, so revert
+				const prevSection: NewTodoSection = JSON.parse(latestEntry.previousState);
+				await this.updateSection(sectionsContext, latestEntry.entityId, prevSection)
+				await trpc.changelogRemoveEntry.mutate(latestEntry.id);
+				return true;
+			}
+		}
+	
+		return false;
 	}
 }
 
