@@ -10,7 +10,7 @@
 </script>
 
 <form onsubmit={async (e) => {e.preventDefault(); props.onSubmit(); console.log(e);}}>
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div class="fixed inset-0 bg-hologram-900 flex items-center justify-center z-50"
         role="dialog"
         tabindex="-1"
         aria-modal="true"
