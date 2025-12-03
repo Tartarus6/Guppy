@@ -3,14 +3,13 @@ import z from 'zod'
 import { eq, like, and, count, sql, inArray } from 'drizzle-orm'
 import { createHTTPServer } from "@trpc/server/adapters/standalone"
 import { publicProcedure, protectedProcedure, router, type Context } from '$lib/server/db/trpc'
-import { sections, todos, userSettings, commandHistory, authenticatedSessions, changelog } from '$lib/server/db/schema'
+import { sections, todos, authenticatedSessions, changelog } from '$lib/server/db/schema'
 import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
-import cors from 'cors'
 import { env } from '$env/dynamic/private'
 import { validateCredentials } from '$lib/server/auth'
 import { createSession, destroySessionInDb } from '$lib/server/db/trpc'
 
-let listenPort = env.PORT
+let listenPort = 3000
 
 const appRouter = router({
     // Get all TODOs
@@ -434,25 +433,24 @@ const server = createHTTPServer({
             sessionId: cookies.guppy_session,
         } satisfies Context;
     },
-    middleware: cors({
-        origin: (origin, callback) => {
-            // Allow requests with no origin (like mobile apps or curl requests)
-            if (!origin) return callback(null, true);
-
-            // In production, allow any origin that matches the expected pattern
-            if (env.NODE_ENV === 'production') {
-                // Allow any HTTPS origin, plus localhost for development
-                const allowedPatterns = [
-                    /^https:\/\/.*$/, // Any HTTPS origin
-                    /^http:\/\/localhost(:\d+)?$/, // localhost with any port
-                    /^http:\/\/127\.0\.0\.1(:\d+)?$/, // 127.0.0.1 with any port
-                ];
-
-                const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
-                return callback(null, isAllowed);
-            }
-
-            // In development, allow specific local origins
+    middleware: (req, res, next) => {
+        const origin = req.headers.origin;
+        
+        // Determine if origin is allowed
+        let isAllowed = false;
+        
+        if (!origin) {
+            // Allow requests with no origin
+            isAllowed = true;
+        } else if (env.NODE_ENV === 'production') {
+            const allowedPatterns = [
+                /^https:\/\/.*$/, // Any HTTPS origin
+                /^http:\/\/.*$/, // TODO: TEMPORARY: allow HTTP for testing ONLY
+                /^http:\/\/localhost(:\d+)?$/, // localhost with any port
+                /^http:\/\/127\.0\.0\.1(:\d+)?$/, // 127.0.0.1 with any port
+            ];
+            isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+        } else {
             const allowedOrigins = [
                 'http://localhost:4173', // SvelteKit preview
                 'http://localhost:5173', // SvelteKit dev
@@ -460,18 +458,28 @@ const server = createHTTPServer({
                 'http://127.0.0.1:5173',
                 'http://localhost:80', // Docker SvelteKit server
                 'http://127.0.0.1:80',
-                'https://localhost:4173', // HTTPS variants
-                'https://localhost:5173',
-                'https://127.0.0.1:4173',
-                'https://127.0.0.1:5173'
+                'http://localhost:3000', // Localhost tRPC server
+                'http://127.0.0.1:3000',
             ];
-
-            return callback(null, allowedOrigins.includes(origin));
-        },
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'trpc-batch-mode', 'x-session-id']
-    })
+            isAllowed = allowedOrigins.includes(origin);
+        }
+        
+        if (isAllowed && origin) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, trpc-batch-mode, x-session-id');
+        }
+        
+        // Handle preflight requests
+        if (req.method === 'OPTIONS') {
+            res.statusCode = 204;
+            res.end();
+            return;
+        }
+        
+        next();
+    }
 })
 
 export type AppRouter = typeof appRouter;

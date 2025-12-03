@@ -34,27 +34,6 @@ export const changelog = sqliteTable('changelog', {
 	timestamp: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 });
 
-// Optional: User settings/preferences (for multi-user support later)
-export const userSettings = sqliteTable('user_settings', {
-	id: integer('id').primaryKey({ autoIncrement: true }),
-	llmProvider: text('llm_provider').notNull().default('ollama'), // "ollama", "openai", etc.
-	llmModel: text('llm_model').notNull().default('llama3.2:3b'),
-	serverUrl: text('server_url'), // For connecting to different LLM servers
-	theme: text('theme').notNull().default('light'),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
-});
-
-// Command history for debugging and learning user patterns
-export const commandHistory = sqliteTable('command_history', {
-	id: integer('id').primaryKey({ autoIncrement: true }),
-	command: text('command').notNull(), // Original user command
-	response: text('response'), // LLM response/actions taken
-	success: integer('success', { mode: 'boolean' }).notNull().default(true),
-	executionTimeMs: real('execution_time_ms'), // Performance tracking
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
-});
-
 // Authenticated sessions
 export const authenticatedSessions = sqliteTable('authenticated_sessions', {
 	id: text('id').primaryKey(),

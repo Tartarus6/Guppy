@@ -61,7 +61,7 @@ export const protectedProcedure = t.procedure.use(isAuthed);
 
 // Determine the API URL based on environment
 const getApiUrl = () => {
-    return "http://localhost:" + envProps.PORT;
+    return "http://localhost:" + 3000;
 };
 
 // trpc router for internal use (unauthenticated - use getAuthenticatedTrpc for protected routes)
