@@ -30,10 +30,13 @@ Make sure to restart the backend server after pushing the changes, otherwise it 
 - pretty undo/redo buttons
 - fix bulk-modification undo/redo broken-ness
 - Add automatic database backups to guppy
-- Add rollback UI to guppy
+- Add database rollback to backup UI to guppy
 - Add persistent database files to guppy
 - Implement section renaming in UI with double click or whatever
 - hide completed todos (with toggle) on page load
+- improve tab and auto-focus across page (e.g. the todo name input should be focused on opening the popup, but it isnt)
+- undo/redo feedback (probably just grey out the buttons when there's nothing to undo/redo)
+- fix `Uncaught (in promise) TRPCClientError: FOREIGN KEY constraint failed` error when redoing in certain circomstances
 
 ## DONE
 - authentication

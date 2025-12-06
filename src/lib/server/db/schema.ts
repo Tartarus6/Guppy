@@ -24,14 +24,24 @@ export const todos = sqliteTable('todos', {
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 });
 
-// Database changelog for undo/redo functionality
+// Database changelog for undo/redo functionality - operation-based approach
+// Stores the inverse operation needed to undo a change
 export const changelog = sqliteTable('changelog', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true), // true for active, false for undone
-	entityType: text('entity_type').notNull(), // "todo" or "section"
-	entityId: integer('entity_id').notNull(), // ID of the todo or section
-	previousState: text('previous_data'), // JSON string of previous state, null if new entity
-	newState: text('new_data'), // JSON string of new state, null if deleted
+	batchId: text('batch_id'), // Optional: groups related changes (e.g., deleting section + its todos)
+	
+	// Core operation data
+	operation: text('operation').notNull(), // 'insert', 'update', 'delete' - the ORIGINAL operation
+	tableName: text('table_name').notNull(), // 'todos' or 'sections'
+	entityId: integer('entity_id').notNull(), // ID of the affected row
+	
+	// Data needed to undo/redo the operation
+	// - For 'insert': empty object {} (just delete by ID)
+	// - For 'update': { old: { ...oldValues }, new: { ...newValues } } of changed fields
+	// - For 'delete': full row data to recreate
+	data: text('data').notNull(), // JSON string
+	
 	timestamp: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 });
 
