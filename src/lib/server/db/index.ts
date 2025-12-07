@@ -2,12 +2,12 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import Database from 'better-sqlite3';
 import * as schema from '$lib/server/db/schema';
-import { env } from '$env/dynamic/private'
+import envProps from '$lib/server/envProps'
 
 // Database connection setup
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+if (!envProps.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-const sqlite = new Database(env.DATABASE_URL);
+const sqlite = new Database(envProps.DATABASE_URL);
 
 export const db = drizzle(sqlite, { schema });
 

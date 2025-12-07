@@ -5,10 +5,11 @@ import { createHTTPServer } from "@trpc/server/adapters/standalone"
 import { publicProcedure, protectedProcedure, router, type Context } from '$lib/server/db/trpc'
 import { sections, todos, authenticatedSessions, changelog } from '$lib/server/db/schema'
 import { getSpeech, getText, sendLLMMessage } from '$lib/server/llm'
-import { env } from '$env/dynamic/private'
+import envProps from '$lib/server/envProps'
 import { validateCredentials } from '$lib/server/auth'
 
-let listenPort = 3000
+// Get port from environment or use default
+const listenPort = parseInt(envProps.SERVER_PORT || '3000', 10)
 
 // ===== INTERNAL SESSION MANAGEMENT =====
 
@@ -997,7 +998,7 @@ const server = createHTTPServer({
         if (!origin) {
             // Allow requests with no origin
             isAllowed = true;
-        } else if (env.NODE_ENV === 'production') {
+        } else if (envProps.NODE_ENV === 'production') {
             const allowedPatterns = [
                 /^https:\/\/.*$/, // Any HTTPS origin
                 /^http:\/\/.*$/, // TODO: TEMPORARY: allow HTTP for testing ONLY

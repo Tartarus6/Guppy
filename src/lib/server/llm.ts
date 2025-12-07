@@ -4,14 +4,14 @@ import { experimental_createMCPClient, generateText, type experimental_MCPClient
 import { InMemoryTransport } from '@socotra/modelcontextprotocol-sdk/inMemory.js';
 import fs from 'fs'
 import { getSections } from '$lib/server';
-import { env } from '$env/dynamic/private';
+import envProps from '$lib/server/envProps';
 import { createMCPServer } from './mcp.js';
 
 // Ensure the GROQ_API_KEY is set in the environment
-process.env.GROQ_API_KEY = process.env.GROQ_API_KEY ?? env.GROQ_API_KEY;
+process.env.GROQ_API_KEY = process.env.GROQ_API_KEY ?? envProps.GROQ_API_KEY;
 
 const voiceLlm = new Groq({
-    apiKey: env.GROQ_API_KEY
+    apiKey: envProps.GROQ_API_KEY
 })
 
 // MCP Client cache per session
@@ -62,7 +62,7 @@ The commands you are given might be poorly transcripted from audio, so words lik
         const tools = await mcpClient.tools();
         
         const result = await generateText({
-            model: groq(env.LLM_MODEL),
+            model: groq(envProps.LLM_MODEL),
             system: systemMessage + `\n\nCurrent todo sections: ${JSON.stringify(await getSections())}\n\nAvailable MCP tools: ${Object.keys(tools)}`,
             prompt: humanMessage,
             tools,
